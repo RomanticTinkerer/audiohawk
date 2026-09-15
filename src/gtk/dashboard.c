@@ -219,7 +219,16 @@ GtkWidget *ah_gtk_dashboard_new(AhCore *core, AdwToastOverlay *toasts)
     g_object_set_data_full(G_OBJECT(page), "dash", d, g_free);
 
     d->banner = ADW_BANNER(adw_banner_new(""));
+#if ADW_CHECK_VERSION(1, 7, 0)
     adw_preferences_page_set_banner(ADW_PREFERENCES_PAGE(page), d->banner);
+#else
+    /* Older libadwaita releases can host the banner in a regular group. */
+    AdwPreferencesGroup *banner_group = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+    adw_preferences_group_add(banner_group, GTK_WIDGET(d->banner));
+    adw_preferences_page_add(ADW_PREFERENCES_PAGE(page), banner_group);
+    g_object_bind_property(d->banner, "revealed", banner_group, "visible",
+                           G_BINDING_SYNC_CREATE);
+#endif
 
     /* ── EQ Settings ─────────────────────────────────────────── */
     AdwPreferencesGroup *eq_group = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
