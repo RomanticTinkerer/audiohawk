@@ -74,6 +74,67 @@ sudo dpkg -i dist/audiohawk_0.1.0_amd64.deb
 
 After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).
 
+## Stereo virtual surround
+
+Enable **Stereo Surround Virtualizer** under GTK Settings, or **Stereo surround**
+in the Qt dashboard. Spatial strength defaults to 50%. Bass and treble lift each
+default to +25% amplitude, approximately +1.94 dB, and can be adjusted independently
+from 0 to 100% extra amplitude in 5% steps. These shelves add to the existing EQ
+and enhancer tuning only while surround is enabled. Strength at zero removes
+spatial distribution but keeps the selected tone lift; disable surround to bypass both.
+Existing configuration files retain their surround on/off setting and receive the
+new defaults when these keys are absent.
+
+The processor preserves the direct left and right signals and adds band-limited
+width, a 0.32 ms opposite-ear delay, and a 12 ms opposite-channel room reflection.
+Filtering the added signal approximates the quieter, darker sound reaching the
+opposite ear. The channels use identical processing, keeping centered vocals centered.
+The previous implementation high-passed the entire side signal, losing stereo bass,
+and applied reflections even with surround disabled. This version filters only the
+added spatial signal and fades surround on/off with a 20 ms time constant.
+
+This is a stereo virtualizer inspired by binaural principles, not a Dolby Atmos
+decoder, licensed Dolby renderer, or measured HRTF renderer. Dolby describes
+[HRTF filtering and spatial metadata](https://professional.dolby.com/categories/mobile/dolby-atmos-for-mobile-devices/)
+and [binaural spatialization settings](https://professionalsupport.dolby.com/s/article/What-is-Binaural-Render-Mode-and-how-do-the-settings-affect-my-mix).
+AudioHawk receives two channels, so it cannot recover original object positions or
+height channels. Headphones provide the most controlled result; speakers also mix
+acoustically in the room.
+
+There is no fixed attenuation in the new spatial stage. A shared stereo soft ceiling
+reduces peaks above 0.97 to keep sample amplitudes at or below 1.0 while preserving
+the L/R ratio. Boosts on already loud material can engage that ceiling, and delayed
+signals can interfere at some frequencies, so +25% describes the shelf gain before
+limiting, not a guarantee of 25% greater perceived loudness. The ceiling is not a
+true-peak oversampling limiter.
+
+Settings persist in `~/.config/audiohawk/effects.conf`:
+
+```ini
+surround_virtualizer=true
+surround_amount=50
+surround_bass=25
+surround_treble=25
+```
+
+### DSP tests on Windows or GNU/Linux
+
+The portable C DSP tests require no PipeWire or desktop libraries:
+
+```sh
+cmake -S . -B build-dsp -DAUDIOHAWK_DSP_TESTS_ONLY=ON
+cmake --build build-dsp
+ctest --test-dir build-dsp --output-on-failure
+```
+
+On GNU/Linux, also build the full application using the earlier commands and run
+`ctest --test-dir build --output-on-failure`. Listen to centered speech, hard-panned
+audio, bass-heavy stereo, and mono material while toggling surround and adjusting
+the three controls. Verify settings after relaunch and check playback after a
+device or sample-rate change. The portable tests cover shelf gain, stereo symmetry,
+cross-channel output, bass retention, bypass, sample ceilings, and settings migration
+at 44.1, 48, 96, 192, and 384 kHz; they do not validate live PipeWire routing or UI rendering.
+
 ## Profile intent
 
 | Profile | Curve idea |
