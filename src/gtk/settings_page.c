@@ -26,6 +26,9 @@ typedef struct {
     AdwActionRow *boost_row;
     GtkWidget *boost_scale;
 
+    GtkWidget *surround_amount_scale;
+    GtkWidget *surround_bass_scale;
+    GtkWidget *surround_treble_scale;
     AdwSwitchRow *surround_switch;
 
     AdwSwitchRow *dialogue_switch;
@@ -61,6 +64,9 @@ static void push_effects(SettingsPage *p)
     fx.volume_leveler = adw_switch_row_get_active(p->leveler_switch);
     fx.volume_boost = scale_int(p->boost_scale);
     fx.surround_virtualizer = adw_switch_row_get_active(p->surround_switch);
+    fx.surround_amount = scale_int(p->surround_amount_scale);
+    fx.surround_bass = scale_int(p->surround_bass_scale);
+    fx.surround_treble = scale_int(p->surround_treble_scale);
     fx.dialogue_enhancer = adw_switch_row_get_active(p->dialogue_switch);
     fx.dialogue_strength = scale_int(p->dialogue_scale);
     ah_core_set_effects(p->core, &fx);
@@ -68,6 +74,9 @@ static void push_effects(SettingsPage *p)
 
 static void refresh_sensitivity(SettingsPage *p)
 {
+    gtk_widget_set_sensitive(p->surround_amount_scale, adw_switch_row_get_active(p->surround_switch));
+    gtk_widget_set_sensitive(p->surround_bass_scale, adw_switch_row_get_active(p->surround_switch));
+    gtk_widget_set_sensitive(p->surround_treble_scale, adw_switch_row_get_active(p->surround_switch));
     gboolean bass = adw_switch_row_get_active(p->bass_switch);
     gboolean mid = adw_switch_row_get_active(p->mid_switch);
     gboolean treble = adw_switch_row_get_active(p->treble_switch);
@@ -111,6 +120,9 @@ static void on_scale_changed(GtkRange *range, gpointer user_data)
     if (GTK_WIDGET(range) == p->bass_scale ||
         GTK_WIDGET(range) == p->mid_scale ||
         GTK_WIDGET(range) == p->treble_scale ||
+        GTK_WIDGET(range) == p->surround_amount_scale ||
+        GTK_WIDGET(range) == p->surround_bass_scale ||
+        GTK_WIDGET(range) == p->surround_treble_scale ||
         GTK_WIDGET(range) == p->boost_scale) {
         int v = scale_int(GTK_WIDGET(range));
         int lo = (GTK_WIDGET(range) == p->boost_scale) ? 100 : 0;
@@ -327,13 +339,25 @@ GtkWidget *ah_gtk_settings_page_new(AhCore *core, AdwToastOverlay *toasts)
 
     p->surround_switch = ADW_SWITCH_ROW(adw_switch_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->surround_switch),
-                                  "Speaker Surround Virtualizer");
+                                  "Stereo Surround Virtualizer");
     adw_action_row_set_subtitle(
         ADW_ACTION_ROW(p->surround_switch),
-        "Widens the stereo image and distributes sound across the two channels");
+        "Adds filtered cross-channel delays and room reflections; best on headphones");
     adw_action_row_add_prefix(ADW_ACTION_ROW(p->surround_switch),
                               ah_icon_image("effect-surround", 22));
     adw_preferences_group_add(surround, GTK_WIDGET(p->surround_switch));
+    p->surround_amount_scale = make_percent_scale(fx->surround_amount);
+    gtk_scale_set_format_value_func(GTK_SCALE(p->surround_amount_scale), format_percent, NULL, NULL);
+    adw_preferences_group_add(surround, GTK_WIDGET(make_slider_row(
+        "Spatial strength", "0-100%; keeps the direct left and right signals", "effect-surround", p->surround_amount_scale)));
+    p->surround_bass_scale = make_percent_scale(fx->surround_bass);
+    gtk_scale_set_format_value_func(GTK_SCALE(p->surround_bass_scale), format_percent, NULL, NULL);
+    adw_preferences_group_add(surround, GTK_WIDGET(make_slider_row(
+        "Surround bass lift", "Extra bass amplitude, default +25%", "effect-surround", p->surround_bass_scale)));
+    p->surround_treble_scale = make_percent_scale(fx->surround_treble);
+    gtk_scale_set_format_value_func(GTK_SCALE(p->surround_treble_scale), format_percent, NULL, NULL);
+    adw_preferences_group_add(surround, GTK_WIDGET(make_slider_row(
+        "Surround treble lift", "Extra treble amplitude, default +25%", "effect-surround", p->surround_treble_scale)));
     adw_preferences_page_add(ADW_PREFERENCES_PAGE(page), surround);
 
     /* ── Dialogue Enhancement ─────────────────────────────────── */
@@ -409,6 +433,9 @@ GtkWidget *ah_gtk_settings_page_new(AhCore *core, AdwToastOverlay *toasts)
     g_signal_connect(p->mid_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
     g_signal_connect(p->treble_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
     g_signal_connect(p->boost_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
+    g_signal_connect(p->surround_amount_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
+    g_signal_connect(p->surround_bass_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
+    g_signal_connect(p->surround_treble_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
     g_signal_connect(p->dialogue_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
 
     return page;
