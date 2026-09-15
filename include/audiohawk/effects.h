@@ -30,6 +30,9 @@ typedef struct {
     int volume_boost; /* 100..200, step 5 */
 
     bool surround_virtualizer;
+    int surround_amount; /* 0..100, spatial strength, step 5 */
+    int surround_bass; /* 0..100 percent extra amplitude, step 5 */
+    int surround_treble; /* 0..100 percent extra amplitude, step 5 */
 
     bool dialogue_enhancer;
     int dialogue_strength; /* 0..10, step 1 */

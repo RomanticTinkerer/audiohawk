@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStyle>
+#include <QSlider>
 #include <QVBoxLayout>
 
 Dashboard::Dashboard(AhCore *core, QWidget *parent)
@@ -214,6 +215,40 @@ Dashboard::Dashboard(AhCore *core, QWidget *parent)
         sHint->setStyleSheet("color:#8B95A5; font-size:13px;");
         lay->addWidget(sHint);
     }
+
+    auto *surround = new QCheckBox(QStringLiteral("Stereo surround"));
+    surround->setChecked(m_core->effects.surround_virtualizer);
+    surround->setToolTip(QStringLiteral("Filtered cross-channel delays and room reflections; best on headphones"));
+    root->addWidget(surround);
+    connect(surround, &QCheckBox::toggled, this, [this](bool on) {
+        AhEffectsState fx = m_core->effects;
+        fx.surround_virtualizer = on;
+        ah_core_set_effects(m_core, &fx);
+    });
+    auto addSpatialSlider = [this, root, surround](const QString &title, int AhEffectsState::*field) {
+        auto *label = new QLabel;
+        auto *slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, 100);
+        slider->setSingleStep(5);
+        slider->setPageStep(5);
+        slider->setValue(m_core->effects.*field);
+        label->setText(title + QStringLiteral(": %1%").arg(slider->value()));
+        slider->setEnabled(surround->isChecked());
+        root->addWidget(label);
+        root->addWidget(slider);
+        connect(surround, &QCheckBox::toggled, slider, &QWidget::setEnabled);
+        connect(slider, &QSlider::valueChanged, this, [this, slider, label, title, field](int value) {
+            int snapped = ((value + 2) / 5) * 5;
+            if (value != snapped) { slider->setValue(snapped); return; }
+            AhEffectsState fx = m_core->effects;
+            fx.*field = snapped;
+            ah_core_set_effects(m_core, &fx);
+            label->setText(title + QStringLiteral(": %1%").arg(snapped));
+        });
+    };
+    addSpatialSlider(QStringLiteral("Spatial strength"), &AhEffectsState::surround_amount);
+    addSpatialSlider(QStringLiteral("Surround bass lift"), &AhEffectsState::surround_bass);
+    addSpatialSlider(QStringLiteral("Surround treble lift"), &AhEffectsState::surround_treble);
 
     m_status = new QLabel;
     m_status->setObjectName(QStringLiteral("ahStatus"));

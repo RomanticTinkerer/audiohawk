@@ -6,6 +6,21 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(CTest)
+option(AUDIOHAWK_DSP_TESTS_ONLY "Build portable DSP tests without PipeWire or UIs" OFF)
+if(BUILD_TESTING)
+    add_executable(audiohawk_spatial_test tests/spatial_test.c src/core/spatial.c src/core/effects.c)
+    target_include_directories(audiohawk_spatial_test PRIVATE include)
+    if(NOT MSVC)
+        target_link_libraries(audiohawk_spatial_test PRIVATE m)
+        target_compile_options(audiohawk_spatial_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME spatial COMMAND audiohawk_spatial_test)
+endif()
+if(AUDIOHAWK_DSP_TESTS_ONLY)
+    return()
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 find_package(Threads REQUIRED)
@@ -19,6 +34,7 @@ add_library(audiohawk_core STATIC
     src/core/app_profiles.c
     src/core/equalizer.c
     src/core/effects.c
+    src/core/spatial.c
     src/core/pipewire_eq.c
     src/core/core.c
 )
