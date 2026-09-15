@@ -32,6 +32,9 @@ void ah_effects_defaults(AhEffectsState *fx)
     fx->treble_level = 50;
     fx->volume_boost = 100;
     fx->dialogue_strength = 5;
+    fx->surround_amount = 50;
+    fx->surround_bass = 25;
+    fx->surround_treble = 25;
 }
 
 static int snap5_range(int v, int lo, int hi)
@@ -52,6 +55,9 @@ void ah_effects_clamp(AhEffectsState *fx)
     fx->bass_level = snap5_range(fx->bass_level, 0, 100);
     fx->mid_level = snap5_range(fx->mid_level, 0, 100);
     fx->treble_level = snap5_range(fx->treble_level, 0, 100);
+    fx->surround_amount = snap5_range(fx->surround_amount, 0, 100);
+    fx->surround_bass = snap5_range(fx->surround_bass, 0, 100);
+    fx->surround_treble = snap5_range(fx->surround_treble, 0, 100);
     fx->volume_boost = snap5_range(fx->volume_boost, 100, 200);
     if (fx->dialogue_strength < 0)
         fx->dialogue_strength = 0;
@@ -127,6 +133,12 @@ int ah_effects_load(AhEffectsState *fx)
             fx->volume_boost = atoi(val);
         else if (strcmp(key, "surround_virtualizer") == 0)
             parse_bool(val, &fx->surround_virtualizer);
+        else if (strcmp(key, "surround_amount") == 0)
+            fx->surround_amount = atoi(val);
+        else if (strcmp(key, "surround_bass") == 0)
+            fx->surround_bass = atoi(val);
+        else if (strcmp(key, "surround_treble") == 0)
+            fx->surround_treble = atoi(val);
         else if (strcmp(key, "dialogue_enhancer") == 0)
             parse_bool(val, &fx->dialogue_enhancer);
         else if (strcmp(key, "dialogue_strength") == 0)
@@ -161,6 +173,9 @@ int ah_effects_save(const AhEffectsState *fx)
     fprintf(f, "volume_leveler=%s\n", tmp.volume_leveler ? "true" : "false");
     fprintf(f, "volume_boost=%d\n", tmp.volume_boost);
     fprintf(f, "surround_virtualizer=%s\n", tmp.surround_virtualizer ? "true" : "false");
+    fprintf(f, "surround_amount=%d\n", tmp.surround_amount);
+    fprintf(f, "surround_bass=%d\n", tmp.surround_bass);
+    fprintf(f, "surround_treble=%d\n", tmp.surround_treble);
     fprintf(f, "dialogue_enhancer=%s\n", tmp.dialogue_enhancer ? "true" : "false");
     fprintf(f, "dialogue_strength=%d\n", tmp.dialogue_strength);
     fclose(f);

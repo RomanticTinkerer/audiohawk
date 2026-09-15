@@ -19,6 +19,7 @@ add_library(audiohawk_core STATIC
     src/core/app_profiles.c
     src/core/equalizer.c
     src/core/effects.c
+    src/core/spatial.c
     src/core/pipewire_eq.c
     src/core/core.c
 )

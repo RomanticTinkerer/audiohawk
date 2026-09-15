@@ -10,10 +10,11 @@
 #include "audiohawk/pipewire_eq.h"
 #include "audiohawk/config.h"
 #include "audiohawk/effects.h"
+#include "audiohawk/spatial.h"
 
+#include <pipewire/pipewire.h>
 #include <pipewire/extensions/metadata.h>
 #include <pipewire/filter.h>
-#include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/utils/result.h>
 
@@ -35,7 +36,6 @@
 #define AH_MAX_NODES 256
 #define AH_MAX_LINKS 16
 #define AH_MAX_STREAMS 128
-#define AH_FX_DELAY_MAX 1024 /* ~21 ms @ 48 kHz — early reflections / space */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -70,18 +70,14 @@ typedef struct {
     AhBiquad treble_shelf;
     AhBiquad dialogue_peak;
     AhBiquad dialogue_scoop;
-    AhBiquad side_hp;      /* keep bass mono when widening */
+    AhSpatialParams spatial;
     AhBiquad velvet_body;  /* soft low-mid density */
     AhBiquad velvet_air;   /* open top for space / reverb tails */
 
     float bass_harm;   /* 0..0.25 wet */
-    float width;       /* side gain boost */
     float leveler_amt; /* 0..1 */
     float volume_gain; /* 1.0..2.0 from volume_boost % */
     float bus_makeup;  /* slight loudness without harshness */
-    float room_wet;    /* early-reflection wet mix */
-    int delay_len;     /* surround micro-delay */
-    int room_len;      /* early reflection delay samples */
     uint32_t rate;
 } AhFxBank;
 
@@ -166,9 +162,7 @@ struct AhPipewireEq {
     atomic_int fx_idx;
     AhBiquadMem fx_mem_l[10];
     AhBiquadMem fx_mem_r[10];
-    float delay_l[AH_FX_DELAY_MAX];
-    float delay_r[AH_FX_DELAY_MAX];
-    int delay_pos;
+    AhSpatialState spatial;
     float leveler_env;
     float leveler_gain;
 
@@ -393,32 +387,6 @@ static void design_lowpass(AhBiquad *bq, float freq, float q, uint32_t rate)
     bq->a2 = a2 / a0;
 }
 
-static void design_highpass(AhBiquad *bq, float freq, float q, uint32_t rate)
-{
-    if (rate < 1)
-        rate = 48000;
-    clamp_freq(&freq, rate);
-    if (q < 0.1f)
-        q = 0.1f;
-
-    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
-    const float cosw = cosf(w0);
-    const float alpha = sinf(w0) / (2.f * q);
-
-    const float b0 = (1.f + cosw) * 0.5f;
-    const float b1 = -(1.f + cosw);
-    const float b2 = (1.f + cosw) * 0.5f;
-    const float a0 = 1.f + alpha;
-    const float a1 = -2.f * cosw;
-    const float a2 = 1.f - alpha;
-
-    bq->b0 = b0 / a0;
-    bq->b1 = b1 / a0;
-    bq->b2 = b2 / a0;
-    bq->a1 = a1 / a0;
-    bq->a2 = a2 / a0;
-}
-
 static float biquad_process(const AhBiquad *bq, AhBiquadMem *m, float x)
 {
     const float y = bq->b0 * x + m->z1;
@@ -435,21 +403,6 @@ static float soft_saturate(float x)
     if (x < -1.35f)
         x = -1.35f;
     return x - (x * x * x) * (1.f / 9.f);
-}
-
-/*
- * Safety ceiling only — high threshold so punch peaks and reverb tails
- * are not flattened the way a loudness limiter would.
- */
-static float soft_limit(float x)
-{
-    const float t = 0.97f;
-    const float a = fabsf(x);
-    if (a <= t)
-        return x;
-    const float s = (a - t) / (1.25f - t);
-    const float y = t + (1.05f - t) * tanhf(s);
-    return copysignf(y, x);
 }
 
 static void rebuild_coeffs(AhPipewireEq *eq, uint32_t rate)
@@ -548,26 +501,12 @@ static void rebuild_fx(AhPipewireEq *eq, uint32_t rate)
         design_unity(&b->dialogue_scoop);
     }
 
-    /* Bass-safe width: widen only above ~220 Hz. */
-    design_highpass(&b->side_hp, 220.f, 0.707f, rate);
-    b->width = b->surround_on ? 0.42f : 0.18f; /* always a little space */
-    b->delay_len = (int)(rate * 0.00032f);
-    if (b->delay_len < 2)
-        b->delay_len = 2;
-    if (b->delay_len >= AH_FX_DELAY_MAX)
-        b->delay_len = AH_FX_DELAY_MAX - 1;
+    ah_spatial_configure(&b->spatial, rate, b->surround_on,
+                         fx.surround_amount, fx.surround_bass, fx.surround_treble);
 
     /* Punch body + open air (+55% with bass/treble/voice lift). */
     design_peaking(&b->velvet_body, 170.f, 1.0f, 2.4f * 1.55f, rate);
     design_highshelf(&b->velvet_air, 7200.f, 0.7f, 1.8f * 1.55f, rate);
-
-    /* Short early reflection — restores room/reverb sense vs dry DSP path. */
-    b->room_len = (int)(rate * 0.012f); /* ~12 ms */
-    if (b->room_len < 8)
-        b->room_len = 8;
-    if (b->room_len >= AH_FX_DELAY_MAX)
-        b->room_len = AH_FX_DELAY_MAX - 1;
-    b->room_wet = 0.16f;
 
     b->leveler_amt = b->leveler_on ? 0.35f : 0.f; /* very light — keep punch/space */
     b->volume_gain = fx.volume_boost / 100.f;
@@ -983,9 +922,7 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         memset(eq->mem_r, 0, sizeof(eq->mem_r));
         memset(eq->fx_mem_l, 0, sizeof(eq->fx_mem_l));
         memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
-        memset(eq->delay_l, 0, sizeof(eq->delay_l));
-        memset(eq->delay_r, 0, sizeof(eq->delay_r));
-        eq->delay_pos = 0;
+        memset(&eq->spatial, 0, sizeof(eq->spatial));
         eq->leveler_env = 0.f;
         eq->leveler_gain = 1.f;
     }
@@ -1006,7 +943,7 @@ static void on_filter_process(void *data, struct spa_io_position *position)
     const AhFxBank *fx = &eq->fx_banks[fi];
 
     /* mem: 0 shelf, 1 punch, 2 lp, 3 mid, 4 treble, 5 dialogue,
-     *      6 scoop, 7 side_hp, 8 velvet_body, 9 velvet_air */
+     *      6 scoop, 7 unused, 8 velvet_body, 9 velvet_air */
     for (uint32_t i = 0; i < n_samples; ++i) {
         float l = in_l ? in_l[i] : 0.f;
         float r = in_r ? in_r[i] : 0.f;
@@ -1051,42 +988,7 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         l = biquad_process(&fx->velvet_air, &eq->fx_mem_l[9], l);
         r = biquad_process(&fx->velvet_air, &eq->fx_mem_r[9], r);
 
-        /* Mild always-on width + optional stronger surround. */
-        if (fx->width > 0.f) {
-            float mid = (l + r) * 0.5f;
-            float side = (l - r) * 0.5f;
-            side = biquad_process(&fx->side_hp, &eq->fx_mem_l[7], side);
-            side *= (1.f + fx->width);
-
-            if (fx->delay_len > 0) {
-                int micro = eq->delay_pos - fx->delay_len;
-                if (micro < 0)
-                    micro += AH_FX_DELAY_MAX;
-                side = side * 0.85f + eq->delay_l[micro] * 0.15f;
-            }
-
-            l = mid + side;
-            r = mid - side;
-        }
-
-        /* Early reflection — brings back room/reverb feel lost in dry DSP. */
-        {
-            const float mono = (l + r) * 0.5f;
-            int er_idx = eq->delay_pos - fx->room_len;
-            if (er_idx < 0)
-                er_idx += AH_FX_DELAY_MAX;
-            const float er = eq->delay_r[er_idx];
-            eq->delay_l[eq->delay_pos] = (l - r) * 0.5f; /* side history */
-            eq->delay_r[eq->delay_pos] = mono;
-            eq->delay_pos++;
-            if (eq->delay_pos >= AH_FX_DELAY_MAX)
-                eq->delay_pos = 0;
-
-            if (fx->room_wet > 0.001f) {
-                l += er * fx->room_wet;
-                r += er * (fx->room_wet * 0.88f);
-            }
-        }
+        ah_spatial_process(&eq->spatial, &fx->spatial, &l, &r);
 
         if (fx->leveler_on && fx->leveler_amt > 0.f) {
             const float mag = 0.5f * (fabsf(l) + fabsf(r));
@@ -1120,8 +1022,7 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         l *= fx->bus_makeup;
         r *= fx->bus_makeup;
         /* No bus soft-saturate — that was flattening punch vs bypass. */
-        l = soft_limit(l);
-        r = soft_limit(r);
+        ah_spatial_limit(&l, &r);
 
         out_l[i] = l;
         out_r[i] = r;
@@ -1515,6 +1416,8 @@ static int arm_graph(AhPipewireEq *eq)
     memset(eq->fx_mem_l, 0, sizeof(eq->fx_mem_l));
     memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
     eq->leveler_gain = 1.f;
+    eq->leveler_env = 0.f;
+    memset(&eq->spatial, 0, sizeof(eq->spatial));
 
     if (create_virtual_sink(eq) != 0)
         return -1;
