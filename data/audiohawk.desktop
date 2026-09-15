@@ -1,0 +1,25 @@
+[Desktop Entry]
+Name=AudioHawk
+GenericName=Audio Enhancer
+Comment=A simple audio enhancer.
+Exec=audiohawk %U
+Icon=audiohawk
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Settings;
+Keywords=equalizer;pipewire;audio;eq;enhancer;bass;
+StartupNotify=true
+StartupWMClass=audiohawk-gtk
+# Closing the window hides to the system tray; EQ keeps running.
+X-GNOME-UsesNotifications=true
+X-GNOME-Autostart-enabled=false
+SingleMainWindow=true
+Actions=Show;Quit;
+
+[Desktop Action Show]
+Name=Show AudioHawk
+Exec=audiohawk
+
+[Desktop Action Quit]
+Name=Quit AudioHawk
+Exec=audiohawk --quit

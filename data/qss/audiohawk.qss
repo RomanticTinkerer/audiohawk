@@ -1,0 +1,132 @@
+/* AudioHawk Qt — matches GTK studio rack tokens */
+
+QWidget#ahRoot {
+    background-color: #12151A;
+    color: #E8ECF1;
+    font-family: "IBM Plex Sans", "Noto Sans", sans-serif;
+}
+
+QLabel#ahBrand {
+    font-family: "IBM Plex Sans Condensed", "Noto Sans", sans-serif;
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #E8ECF1;
+}
+
+QLabel#ahBrandSub {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: #8B95A5;
+    text-transform: uppercase;
+}
+
+QFrame#ahSignalRail {
+    background-color: #8A6412;
+    border: none;
+    min-height: 4px;
+    max-height: 4px;
+    border-radius: 2px;
+}
+
+QFrame#ahSignalRail[armed="true"] {
+    background-color: #E8A317;
+}
+
+QFrame.ahPanel {
+    background-color: #1A1F27;
+    border: 1px solid #2C3440;
+    border-radius: 10px;
+}
+
+QLabel.ahSection {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #8B95A5;
+}
+
+QLabel.ahBlurb, QLabel.ahMuted {
+    color: #8B95A5;
+    font-size: 13px;
+}
+
+QLabel#ahStatus {
+    color: #8B95A5;
+    font-family: "IBM Plex Mono", "Noto Sans Mono", monospace;
+    font-size: 12px;
+}
+
+QPushButton.ahChip, QPushButton.ahIntel {
+    background-color: #222833;
+    border: 1px solid #2C3440;
+    border-radius: 8px;
+    color: #E8ECF1;
+    font-weight: 600;
+    padding: 10px 16px;
+}
+
+QPushButton.ahChip:hover, QPushButton.ahIntel:hover {
+    border-color: #2EC4B6;
+}
+
+QPushButton.ahChip[active="true"] {
+    background-color: rgba(46, 196, 182, 40);
+    border-color: #2EC4B6;
+    color: #2EC4B6;
+}
+
+QPushButton.ahIntel[active="true"] {
+    background-color: rgba(232, 163, 23, 40);
+    border-color: #E8A317;
+    color: #E8A317;
+}
+
+QPushButton#ahManage {
+    background-color: transparent;
+    border: 1px solid #2C3440;
+    border-radius: 8px;
+    color: #E8ECF1;
+    font-weight: 600;
+    padding: 10px 16px;
+}
+
+QPushButton#ahManage:hover {
+    border-color: #E8A317;
+    color: #E8A317;
+}
+
+QScrollArea {
+    border: none;
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    height: 8px;
+    background: #12151A;
+}
+
+QScrollBar::handle:horizontal {
+    background: #2C3440;
+    border-radius: 4px;
+    min-width: 32px;
+}
+
+QCheckBox {
+    spacing: 10px;
+    color: #E8ECF1;
+}
+
+QCheckBox::indicator {
+    width: 42px;
+    height: 24px;
+    border-radius: 12px;
+    background: #2C3440;
+    border: 1px solid #2C3440;
+}
+
+QCheckBox::indicator:checked {
+    background: #2EC4B6;
+    border-color: #2EC4B6;
+}

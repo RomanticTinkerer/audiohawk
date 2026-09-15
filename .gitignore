@@ -1,0 +1,45 @@
+# Build trees
+/build/
+/build-deb/
+/dist/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+install_manifest.txt
+CMakeUserPresets.json
+
+# Qt / AUTOMOC
+*_autogen/
+.qt/
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# Compiler artifacts
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Packages
+*.deb
+*.rpm
+*.tar.gz
+*.AppImage
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

@@ -1,0 +1,45 @@
+/* AudioHawk — light Adwaita chrome + floating bottom dock */
+
+.ah-dock-wrap {
+  padding: 10px 16px 16px;
+}
+
+.ah-dock {
+  background-color: alpha(@window_bg_color, 0.92);
+  border: 1px solid alpha(@window_fg_color, 0.12);
+  border-radius: 28px;
+  padding: 6px 10px;
+  min-height: 56px;
+  box-shadow: 0 8px 28px alpha(black, 0.18);
+}
+
+.ah-dock-btn {
+  border-radius: 20px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: alpha(@window_fg_color, 0.7);
+}
+
+.ah-dock-btn:hover {
+  background-color: alpha(@window_fg_color, 0.06);
+}
+
+.ah-dock-btn.active {
+  background-color: alpha(@accent_bg_color, 0.18);
+  color: @accent_color;
+  font-weight: 700;
+}
+
+.ah-eq-curve {
+  background-color: @card_bg_color;
+  border: 1px solid alpha(@window_fg_color, 0.10);
+  border-radius: 12px;
+  min-height: 180px;
+}
+
+.ah-band-scale {
+  min-height: 160px;
+}
