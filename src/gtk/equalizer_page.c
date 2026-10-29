@@ -17,6 +17,7 @@ typedef struct {
     GtkWidget *curve_area;
     GtkWidget *scales[AH_EQ_BANDS_MAX];
     gboolean suppress;
+    int drag_band;
 } EqPage;
 
 static void sync_checks(GtkWidget **checks, int count, int active)
@@ -32,6 +33,68 @@ static const char *fmt_freq(float hz, char *buf, size_t n)
     else
         snprintf(buf, n, "%.0f", hz);
     return buf;
+}
+
+static void curve_xy_to_band(const EqPage *p, double x, double y,
+                             int *idx, float *gain_db)
+{
+    int n = (int)p->core->equalizer.band_count;
+    int width = gtk_widget_get_width(p->curve_area);
+    int height = gtk_widget_get_height(p->curve_area);
+    if (n < 1)
+        n = 1;
+    if (width < 25)
+        width = 320;
+    if (height < 8)
+        height = 180;
+
+    double t = (x - 12.0) / (double)(width - 24);
+    if (t < 0.0)
+        t = 0.0;
+    if (t > 1.0)
+        t = 1.0;
+    int i = (int)lround(t * (double)(n - 1));
+    if (i < 0)
+        i = 0;
+    if (i > n - 1)
+        i = n - 1;
+
+    double mid = height * 0.5;
+    double g = (mid - y) / (height * 0.42) * 12.0;
+    if (g > 12.0)
+        g = 12.0;
+    if (g < -12.0)
+        g = -12.0;
+
+    *idx = i;
+    *gain_db = (float)g;
+}
+
+static void apply_curve_point(EqPage *p, double x, double y)
+{
+    int idx = 0;
+    float gain = 0.f;
+    curve_xy_to_band(p, x, y, &idx, &gain);
+    p->drag_band = idx;
+    ah_core_set_band_gain(p->core, idx, gain);
+
+    if (p->scales[idx]) {
+        p->suppress = TRUE;
+        gtk_range_set_value(GTK_RANGE(p->scales[idx]), gain);
+        GtkWidget *glab = g_object_get_data(G_OBJECT(p->scales[idx]), "gain-label");
+        if (glab) {
+            char gbuf[16];
+            snprintf(gbuf, sizeof(gbuf), "%+.0f", gain);
+            gtk_label_set_text(GTK_LABEL(glab), gbuf);
+        }
+        p->suppress = FALSE;
+    }
+    if (p->preset_combo) {
+        p->suppress = TRUE;
+        adw_combo_row_set_selected(p->preset_combo, AH_EQ_PRESET_CUSTOM);
+        p->suppress = FALSE;
+    }
+    gtk_widget_queue_draw(p->curve_area);
 }
 
 static void draw_curve(GtkDrawingArea *area, cairo_t *cr, int width, int height,
@@ -85,9 +148,37 @@ static void draw_curve(GtkDrawingArea *area, cairo_t *cr, int width, int height,
         double x = (double)i / (double)(n - 1) * (width - 24.0) + 12.0;
         double g = p->core->equalizer.bands[i].gain_db;
         double y = mid - (g / 12.0) * (height * 0.42);
-        cairo_arc(cr, x, y, 3.5, 0, G_PI * 2.0);
+        double r = (i == p->drag_band) ? 5.5 : 4.0;
+        cairo_arc(cr, x, y, r, 0, G_PI * 2.0);
         cairo_fill(cr);
     }
+}
+
+static void on_curve_drag_begin(GtkGestureDrag *gesture, double x, double y,
+                                gpointer user_data)
+{
+    (void)gesture;
+    apply_curve_point(user_data, x, y);
+}
+
+static void on_curve_drag_update(GtkGestureDrag *gesture, double dx, double dy,
+                                 gpointer user_data)
+{
+    double sx = 0, sy = 0;
+    if (!gtk_gesture_drag_get_start_point(gesture, &sx, &sy))
+        return;
+    apply_curve_point(user_data, sx + dx, sy + dy);
+}
+
+static void on_curve_drag_end(GtkGestureDrag *gesture, double dx, double dy,
+                              gpointer user_data)
+{
+    EqPage *p = user_data;
+    (void)gesture;
+    (void)dx;
+    (void)dy;
+    p->drag_band = -1;
+    gtk_widget_queue_draw(p->curve_area);
 }
 
 static void on_scale_changed(GtkRange *range, gpointer user_data)
@@ -250,6 +341,7 @@ GtkWidget *ah_gtk_equalizer_page_new(AhCore *core, AdwToastOverlay *toasts)
 {
     EqPage *p = g_new0(EqPage, 1);
     p->core = core;
+    p->drag_band = -1;
     (void)toasts;
 
     GtkWidget *page = adw_preferences_page_new();
@@ -305,7 +397,7 @@ GtkWidget *ah_gtk_equalizer_page_new(AhCore *core, AdwToastOverlay *toasts)
     AdwPreferencesGroup *view = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
     adw_preferences_group_set_title(view, "Equalizer View");
 
-    AdwActionRow *curve_row = make_choice_row("Curve", "Frequency response plot", "view-curve",
+    AdwActionRow *curve_row = make_choice_row("Curve", "Drag the plot to shape bands", "view-curve",
                                               &p->view_checks[0]);
     g_object_set_data(G_OBJECT(curve_row), "view-id", GINT_TO_POINTER(AH_EQ_VIEW_CURVE));
     g_signal_connect(curve_row, "activated", G_CALLBACK(on_view_activated), p);
@@ -323,7 +415,8 @@ GtkWidget *ah_gtk_equalizer_page_new(AhCore *core, AdwToastOverlay *toasts)
     /* Live editor host */
     AdwPreferencesGroup *editor = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
     adw_preferences_group_set_title(editor, "Bands");
-    adw_preferences_group_set_description(editor, "Drag to shape the PipeWire filter-chain EQ.");
+    adw_preferences_group_set_description(
+        editor, "Drag the curve handles or sliders to shape the PipeWire filter-chain EQ.");
 
     p->view_stack = gtk_stack_new();
     gtk_widget_set_margin_top(p->view_stack, 8);
@@ -333,9 +426,19 @@ GtkWidget *ah_gtk_equalizer_page_new(AhCore *core, AdwToastOverlay *toasts)
 
     p->curve_area = gtk_drawing_area_new();
     gtk_widget_add_css_class(p->curve_area, "ah-eq-curve");
+    gtk_widget_set_hexpand(p->curve_area, TRUE);
+    gtk_widget_set_cursor_from_name(p->curve_area, "pointer");
     gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(p->curve_area), 320);
-    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(p->curve_area), 180);
+    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(p->curve_area), 220);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(p->curve_area), draw_curve, p, NULL);
+    GtkGesture *drag = gtk_gesture_drag_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag), GDK_BUTTON_PRIMARY);
+    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(drag),
+                                               GTK_PHASE_CAPTURE);
+    g_signal_connect(drag, "drag-begin", G_CALLBACK(on_curve_drag_begin), p);
+    g_signal_connect(drag, "drag-update", G_CALLBACK(on_curve_drag_update), p);
+    g_signal_connect(drag, "drag-end", G_CALLBACK(on_curve_drag_end), p);
+    gtk_widget_add_controller(p->curve_area, GTK_EVENT_CONTROLLER(drag));
     gtk_stack_add_named(GTK_STACK(p->view_stack), p->curve_area, "curve");
 
     GtkWidget *scroll = gtk_scrolled_window_new();

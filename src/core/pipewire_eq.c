@@ -10,6 +10,7 @@
 #include "audiohawk/pipewire_eq.h"
 #include "audiohawk/config.h"
 #include "audiohawk/effects.h"
+#include "audiohawk/pitch.h"
 #include "audiohawk/spatial.h"
 
 #include <pipewire/pipewire.h>
@@ -78,6 +79,7 @@ typedef struct {
     float leveler_amt; /* 0..1 */
     float volume_gain; /* 1.0..2.0 from volume_boost % */
     float bus_makeup;  /* slight loudness without harshness */
+    int pitch;         /* semitones, 0 = bypass */
     uint32_t rate;
 } AhFxBank;
 
@@ -163,6 +165,7 @@ struct AhPipewireEq {
     AhBiquadMem fx_mem_l[10];
     AhBiquadMem fx_mem_r[10];
     AhSpatialState spatial;
+    AhPitchState pitch;
     float leveler_env;
     float leveler_gain;
 
@@ -516,6 +519,7 @@ static void rebuild_fx(AhPipewireEq *eq, uint32_t rate)
         b->volume_gain = 2.f;
     /* Fixed loudness floor vs direct hardware path (not the Boost slider). */
     b->bus_makeup = 1.07f * 1.20f * 1.18f;
+    b->pitch = fx.pitch;
 
     atomic_store_explicit(&eq->fx_idx, wi, memory_order_release);
 }
@@ -923,6 +927,7 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         memset(eq->fx_mem_l, 0, sizeof(eq->fx_mem_l));
         memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
         memset(&eq->spatial, 0, sizeof(eq->spatial));
+        ah_pitch_reset(&eq->pitch);
         eq->leveler_env = 0.f;
         eq->leveler_gain = 1.f;
     }
@@ -1021,6 +1026,8 @@ static void on_filter_process(void *data, struct spa_io_position *position)
 
         l *= fx->bus_makeup;
         r *= fx->bus_makeup;
+        if (fx->pitch != 0)
+            ah_pitch_process(&eq->pitch, fx->pitch, &l, &r);
         /* No bus soft-saturate — that was flattening punch vs bypass. */
         ah_spatial_limit(&l, &r);
 
@@ -1418,6 +1425,7 @@ static int arm_graph(AhPipewireEq *eq)
     eq->leveler_gain = 1.f;
     eq->leveler_env = 0.f;
     memset(&eq->spatial, 0, sizeof(eq->spatial));
+    ah_pitch_reset(&eq->pitch);
 
     if (create_virtual_sink(eq) != 0)
         return -1;

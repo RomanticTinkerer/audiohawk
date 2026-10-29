@@ -35,6 +35,9 @@ typedef struct {
     AdwActionRow *dialogue_strength_row;
     GtkWidget *dialogue_scale;
 
+    AdwActionRow *pitch_row;
+    GtkWidget *pitch_scale;
+
     AdwSwitchRow *startup_switch;
 } SettingsPage;
 
@@ -69,6 +72,7 @@ static void push_effects(SettingsPage *p)
     fx.surround_treble = scale_int(p->surround_treble_scale);
     fx.dialogue_enhancer = adw_switch_row_get_active(p->dialogue_switch);
     fx.dialogue_strength = scale_int(p->dialogue_scale);
+    fx.pitch = scale_int(p->pitch_scale);
     ah_core_set_effects(p->core, &fx);
 }
 
@@ -194,6 +198,29 @@ static char *format_strength(GtkScale *scale, double value, gpointer user_data)
     (void)scale;
     (void)user_data;
     return g_strdup_printf("%.0f", value);
+}
+
+static char *format_pitch(GtkScale *scale, double value, gpointer user_data)
+{
+    (void)scale;
+    (void)user_data;
+    int v = (int)(value + (value < 0 ? -0.5 : 0.5));
+    if (v == 0)
+        return g_strdup("0");
+    return g_strdup_printf("%+d", v);
+}
+
+static GtkWidget *make_pitch_scale(int value)
+{
+    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, -15, 15, 1);
+    gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
+    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
+    gtk_scale_set_digits(GTK_SCALE(scale), 0);
+    gtk_widget_set_size_request(scale, 160, -1);
+    gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_valign(scale, GTK_ALIGN_CENTER);
+    set_scale(scale, value);
+    return scale;
 }
 
 static GtkWidget *make_strength_scale(int value)
@@ -383,6 +410,22 @@ GtkWidget *ah_gtk_settings_page_new(AhCore *core, AdwToastOverlay *toasts)
     adw_preferences_group_add(dialogue, GTK_WIDGET(p->dialogue_strength_row));
     adw_preferences_page_add(ADW_PREFERENCES_PAGE(page), dialogue);
 
+    /* ── Pitch ────────────────────────────────────────────────── */
+    AdwPreferencesGroup *pitch = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+    adw_preferences_group_set_title(pitch, "Pitch");
+    adw_preferences_group_set_description(
+        pitch,
+        "Shifts all audio routed through AudioHawk. Equalizer must be on.");
+
+    p->pitch_scale = make_pitch_scale(fx->pitch);
+    gtk_scale_set_format_value_func(GTK_SCALE(p->pitch_scale), format_pitch, NULL, NULL);
+    p->pitch_row = make_slider_row("System pitch",
+                                   "-15 to +15 semitones, 0 is unshifted",
+                                   "treble",
+                                   p->pitch_scale);
+    adw_preferences_group_add(pitch, GTK_WIDGET(p->pitch_row));
+    adw_preferences_page_add(ADW_PREFERENCES_PAGE(page), pitch);
+
     /* ── Startup ──────────────────────────────────────────────── */
     AdwPreferencesGroup *startup = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
     adw_preferences_group_set_title(startup, "Startup");
@@ -417,6 +460,7 @@ GtkWidget *ah_gtk_settings_page_new(AhCore *core, AdwToastOverlay *toasts)
     adw_switch_row_set_active(p->surround_switch, fx->surround_virtualizer);
     adw_switch_row_set_active(p->dialogue_switch, fx->dialogue_enhancer);
     set_scale(p->dialogue_scale, fx->dialogue_strength);
+    set_scale(p->pitch_scale, fx->pitch);
     adw_switch_row_set_active(p->startup_switch, core->settings.start_on_startup);
     refresh_sensitivity(p);
     p->suppress = FALSE;
@@ -437,6 +481,7 @@ GtkWidget *ah_gtk_settings_page_new(AhCore *core, AdwToastOverlay *toasts)
     g_signal_connect(p->surround_bass_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
     g_signal_connect(p->surround_treble_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
     g_signal_connect(p->dialogue_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
+    g_signal_connect(p->pitch_scale, "value-changed", G_CALLBACK(on_scale_changed), p);
 
     return page;
 }

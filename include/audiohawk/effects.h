@@ -36,6 +36,9 @@ typedef struct {
 
     bool dialogue_enhancer;
     int dialogue_strength; /* 0..10, step 1 */
+
+    /* Universal pitch of all AudioHawk-routed audio, in semitones. */
+    int pitch; /* -15..15 */
 } AhEffectsState;
 
 typedef struct {

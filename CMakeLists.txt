@@ -1,15 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
-project(AudioHawk VERSION 0.1.0 LANGUAGES C CXX)
+project(AudioHawk VERSION 0.2.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(CTest)
 option(AUDIOHAWK_DSP_TESTS_ONLY "Build portable DSP tests without PipeWire or UIs" OFF)
 if(BUILD_TESTING)
-    add_executable(audiohawk_spatial_test tests/spatial_test.c src/core/spatial.c src/core/effects.c)
+    add_executable(audiohawk_spatial_test
+        tests/spatial_test.c
+        src/core/spatial.c
+        src/core/effects.c
+        src/core/pitch.c)
     target_include_directories(audiohawk_spatial_test PRIVATE include)
     if(NOT MSVC)
         target_link_libraries(audiohawk_spatial_test PRIVATE m)
@@ -26,7 +28,6 @@ pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 find_package(Threads REQUIRED)
 
 option(AUDIOHAWK_BUILD_GTK "Build GTK4/libadwaita UI" ON)
-option(AUDIOHAWK_BUILD_QT "Build Qt6 UI" ON)
 
 add_library(audiohawk_core STATIC
     src/core/profiles.c
@@ -35,6 +36,7 @@ add_library(audiohawk_core STATIC
     src/core/equalizer.c
     src/core/effects.c
     src/core/spatial.c
+    src/core/pitch.c
     src/core/pipewire_eq.c
     src/core/core.c
 )
@@ -101,31 +103,6 @@ if(AUDIOHAWK_BUILD_GTK)
     endif()
 endif()
 
-# --- Qt UI ---
-set(HAVE_QT_UI OFF)
-if(AUDIOHAWK_BUILD_QT)
-    find_package(Qt6 COMPONENTS Widgets QUIET)
-    if(Qt6_FOUND)
-        set(HAVE_QT_UI ON)
-        add_executable(audiohawk-qt
-            src/qt/main.cpp
-            src/qt/Dashboard.cpp
-            src/qt/Dashboard.h
-        )
-        set_target_properties(audiohawk-qt PROPERTIES AUTOMOC ON)
-        target_include_directories(audiohawk-qt PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/qt
-        )
-        target_link_libraries(audiohawk-qt PRIVATE
-            audiohawk_core
-            Qt6::Widgets
-        )
-        target_compile_options(audiohawk-qt PRIVATE -Wall -Wextra)
-    else()
-        message(WARNING "Qt6 Widgets not found — skipping audiohawk-qt.")
-    endif()
-endif()
-
 # --- Install ---
 include(GNUInstallDirs)
 install(TARGETS audiohawk RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -136,9 +113,6 @@ install(DIRECTORY data/icons/hicolor/
         FILES_MATCHING
         PATTERN "*.png"
         PATTERN "*.svg")
-install(FILES data/appicon/audiohawk.svg
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
-        RENAME audiohawk.svg)
 if(HAVE_GTK_UI)
     install(TARGETS audiohawk-gtk RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES data/css/audiohawk.css DESTINATION ${CMAKE_INSTALL_DATADIR}/audiohawk)
@@ -148,9 +122,4 @@ if(HAVE_GTK_UI)
             DESTINATION ${CMAKE_INSTALL_DATADIR}/audiohawk/tray
             FILES_MATCHING PATTERN "*.png")
 endif()
-if(HAVE_QT_UI)
-    install(TARGETS audiohawk-qt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES data/qss/audiohawk.qss DESTINATION ${CMAKE_INSTALL_DATADIR}/audiohawk)
-endif()
-
-message(STATUS "AudioHawk UI: GTK=${HAVE_GTK_UI} Qt=${HAVE_QT_UI}")
+message(STATUS "AudioHawk UI: GTK=${HAVE_GTK_UI}")

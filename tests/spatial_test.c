@@ -1,5 +1,6 @@
 #include "audiohawk/spatial.h"
 #include "audiohawk/effects.h"
+#include "audiohawk/pitch.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,6 +60,10 @@ int main(void)
     CHECK(ah_effects_load(&loaded) == 0);
     CHECK(loaded.surround_virtualizer && loaded.surround_amount == 85);
     CHECK(loaded.surround_bass == 0 && loaded.surround_treble == 100);
+    fx.pitch = 40;
+    CHECK(ah_effects_save(&fx) == 0);
+    CHECK(ah_effects_load(&loaded) == 0);
+    CHECK(loaded.pitch == 15);
     CHECK(remove(config_path) == 0);
     CHECK(test_rmdir(config_dir) == 0);
 
@@ -114,6 +119,41 @@ int main(void)
         float l = 0, r = 0;
         ah_spatial_process(&a, &p, &l, &r);
         CHECK(l == 0 && r == 0);
+    }
+    CHECK(ah_pitch_clamp(40) == 15 && ah_pitch_clamp(-40) == -15);
+    {
+        AhPitchState ps;
+        float l = 0.3f, r = -0.1f;
+        ah_pitch_reset(&ps);
+        ah_pitch_process(&ps, 0, &l, &r);
+        CHECK(l == 0.3f && r == -0.1f);
+    }
+    {
+        const unsigned rate = 48000;
+        const float hz = 440.f;
+        int zc0 = 0, zc12 = 0;
+        float prev0 = 0, prev12 = 0;
+        AhPitchState p0, p12;
+        ah_pitch_reset(&p0);
+        ah_pitch_reset(&p12);
+        unsigned skip = AH_PITCH_BUF * 2;
+        for (unsigned i = 0; i < rate + skip; ++i) {
+            float x = sinf(6.28318530718f * hz * i / rate);
+            float a = x, b = x, c = x, d = x;
+            ah_pitch_process(&p0, 0, &a, &b);
+            ah_pitch_process(&p12, 12, &c, &d);
+            CHECK(isfinite(c) && isfinite(d));
+            if (i > skip) {
+                if (prev0 < 0 && a >= 0)
+                    zc0++;
+                if (prev12 < 0 && c >= 0)
+                    zc12++;
+            }
+            prev0 = a;
+            prev12 = c;
+        }
+        CHECK(zc0 > 400 && zc0 < 480);
+        CHECK(zc12 > zc0);
     }
     puts("All spatial DSP and settings checks passed.");
     return 0;

@@ -2,14 +2,7 @@
 
 PipeWire equalizer and listening-profile controller for GNU/Linux.
 
-AudioHawk is written in **C** (core + GTK UI + launcher) with a **C++/Qt** UI for Plasma. The launcher picks the toolkit from your desktop environment:
-
-| Desktop | UI |
-|---------|----|
-| GNOME, Cinnamon, MATE, XFCE, Budgie, Pantheon, … | GTK4 + libadwaita |
-| KDE Plasma, LXQt, Deepin, … | Qt6 |
-
-Force a toolkit with `AUDIOHAWK_UI=gtk` or `AUDIOHAWK_UI=qt`.
+AudioHawk is written in **C** (core, GTK UI, and launcher) using GTK4 and libadwaita.
 
 ## Dashboard (this release)
 
@@ -17,6 +10,7 @@ Force a toolkit with `AUDIOHAWK_UI=gtk` or `AUDIOHAWK_UI=qt`.
 - **Profiles** (horizontal scroll): Music, Movie/Video, Game, Work, Casual, Mood
 - **Intelligent Equalizer**: Off, Detailed, Warm, Balanced
 - **Per App Audio Profiles**: auto-switch, per-device memory, manage/seed app mappings
+- **System pitch** — shift all AudioHawk-routed audio from -15 to +15 semitones
 - **Start on system startup** — XDG autostart (Settings); launches hidden with `--background`
 - **Suspend survival** — reconnects to PipeWire after sleep and re-arms EQ automatically
 
@@ -25,7 +19,7 @@ Force a toolkit with `AUDIOHAWK_UI=gtk` or `AUDIOHAWK_UI=qt`.
 **Required**
 
 - CMake ≥ 3.20
-- GCC/Clang with C11 + C++17
+- GCC/Clang with C11
 - PipeWire (`libpipewire-0.3` / `pipewire-devel`)
 
 **GTK UI**
@@ -33,18 +27,12 @@ Force a toolkit with `AUDIOHAWK_UI=gtk` or `AUDIOHAWK_UI=qt`.
 - `gtk4-devel` + `libadwaita-devel` (Fedora)
 - `libgtk-4-dev` + `libadwaita-1-dev` (Debian/Ubuntu)
 
-**Qt UI**
-
-- `qt6-qtbase-devel` (Fedora) / `qt6-base-dev` (Debian/Ubuntu)
-
 ## Build
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ```
-
-If GTK packages are missing, CMake still builds the core, launcher, and Qt UI.
 
 ```bash
 # Fedora example for the GTK binary
@@ -54,9 +42,8 @@ sudo dnf install gtk4-devel libadwaita-devel
 ## Run
 
 ```bash
-./build/audiohawk          # auto UI
-./build/audiohawk-qt       # Qt dashboard
-./build/audiohawk-gtk      # GTK dashboard (when built)
+./build/audiohawk          # launcher
+./build/audiohawk-gtk      # GTK dashboard
 ```
 
 Turn **Equalizer** on. AudioHawk creates a virtual sink and moves output streams to it via PipeWire metadata (EasyEffects-style), then runs EQ/effects into your real speakers. The system default sink is left alone.
@@ -65,19 +52,27 @@ Closing the window keeps AudioHawk running so EQ stays active. After suspend/res
 
 Enable **Start on system startup** in Settings to launch hidden at login (`--background` via XDG autostart).
 
-## Package (.deb)
+## Install
+
+One command (x86_64, needs sudo, curl, and tar):
 
 ```bash
-./scripts/build-deb.sh
-sudo dpkg -i dist/audiohawk_0.1.0_amd64.deb
+curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/download/install.sh | sudo sh
 ```
 
-After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).
+That downloads the release tarball and copies it to `/usr/local`. Packages are also on [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases):
+
+```bash
+sudo dpkg -i audiohawk_0.2.0_amd64.deb
+sudo rpm -i audiohawk-0.2.0-1.x86_64.rpm
+chmod +x AudioHawk-0.2.0-x86_64.AppImage
+```
+
+Build packages locally with `./scripts/package.sh`. After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).
 
 ## Stereo virtual surround
 
-Enable **Stereo Surround Virtualizer** under GTK Settings, or **Stereo surround**
-in the Qt dashboard. Spatial strength defaults to 50%. Bass and treble lift each
+Enable **Stereo Surround Virtualizer** under Settings. Spatial strength defaults to 50%. Bass and treble lift each
 default to +25% amplitude, approximately +1.94 dB, and can be adjusted independently
 from 0 to 100% extra amplitude in 5% steps. These shelves add to the existing EQ
 and enhancer tuning only while surround is enabled. Strength at zero removes

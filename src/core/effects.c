@@ -1,5 +1,6 @@
 #include "audiohawk/effects.h"
 #include "audiohawk/config.h"
+#include "audiohawk/pitch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,6 +64,7 @@ void ah_effects_clamp(AhEffectsState *fx)
         fx->dialogue_strength = 0;
     if (fx->dialogue_strength > 10)
         fx->dialogue_strength = 10;
+    fx->pitch = ah_pitch_clamp(fx->pitch);
 }
 
 bool ah_effects_any_active(const AhEffectsState *fx)
@@ -71,7 +73,8 @@ bool ah_effects_any_active(const AhEffectsState *fx)
         return false;
     return fx->bass_enhancer || fx->mid_enhancer || fx->treble_enhancer ||
            fx->volume_leveler || fx->volume_boost > 100 ||
-           fx->surround_virtualizer || fx->dialogue_enhancer;
+           fx->surround_virtualizer || fx->dialogue_enhancer ||
+           fx->pitch != 0;
 }
 
 static int parse_bool(const char *v, bool *out)
@@ -143,6 +146,8 @@ int ah_effects_load(AhEffectsState *fx)
             parse_bool(val, &fx->dialogue_enhancer);
         else if (strcmp(key, "dialogue_strength") == 0)
             fx->dialogue_strength = atoi(val);
+        else if (strcmp(key, "pitch") == 0)
+            fx->pitch = atoi(val);
     }
     fclose(f);
     ah_effects_clamp(fx);
@@ -178,6 +183,7 @@ int ah_effects_save(const AhEffectsState *fx)
     fprintf(f, "surround_treble=%d\n", tmp.surround_treble);
     fprintf(f, "dialogue_enhancer=%s\n", tmp.dialogue_enhancer ? "true" : "false");
     fprintf(f, "dialogue_strength=%d\n", tmp.dialogue_strength);
+    fprintf(f, "pitch=%d\n", tmp.pitch);
     fclose(f);
     return 0;
 }
