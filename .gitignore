@@ -2,6 +2,9 @@
 /build/
 /build-dsp/
 /build-deb/
+/build-pkg/
+/build-rpm/
+/build-appimage/
 /dist/
 
 # CMake

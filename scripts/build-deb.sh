@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${AUDIOHAWK_VERSION:-0.1.0}"
+VERSION="${AUDIOHAWK_VERSION:-0.2.0}"
 ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 BUILD="$ROOT/build-deb"
 STAGE="$BUILD/stage"
@@ -28,10 +28,10 @@ Version: ${VERSION}
 Section: sound
 Priority: optional
 Architecture: ${ARCH}
-Depends: libpipewire-0.3-0 | libpipewire-0.3-0t64, libgtk-4-1, libadwaita-1-0, libqt6widgets6, libglib2.0-0 | libglib2.0-0t64
-Maintainer: AudioHawk <audiohawk@localhost>
+Depends: libpipewire-0.3-0 | libpipewire-0.3-0t64, libgtk-4-1, libadwaita-1-0, libglib2.0-0 | libglib2.0-0t64
+Maintainer: Animesh Singh <253191443+RomanticTinkerer@users.noreply.github.com>
 Installed-Size: ${SIZE_KB}
-Homepage: https://github.com/audiohawk/audiohawk
+Homepage: https://github.com/RomanticTinkerer/audiohawk
 Description: A simple audio enhancer.
  AudioHawk is a PipeWire equalizer and listening-profile controller.
  It can run in the system tray so processing continues after the window
