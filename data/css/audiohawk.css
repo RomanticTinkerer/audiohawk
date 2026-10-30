@@ -15,9 +15,9 @@
 
 .ah-dock-btn {
   border-radius: 20px;
-  min-width: 64px;
+  min-width: 56px;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 8px 10px;
   background: transparent;
   border: none;
   color: alpha(@window_fg_color, 0.7);
@@ -42,4 +42,23 @@
 
 .ah-band-scale {
   min-height: 160px;
+}
+
+.ah-adv-status {
+  color: alpha(@window_fg_color, 0.75);
+}
+
+.ah-clip {
+  font-weight: 700;
+}
+
+.ah-clip-hot {
+  color: #e01b24;
+}
+
+.ah-spectrum {
+  background-color: @card_bg_color;
+  border: 1px solid alpha(@window_fg_color, 0.10);
+  border-radius: 12px;
+  min-height: 110px;
 }

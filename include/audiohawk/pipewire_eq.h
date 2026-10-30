@@ -1,6 +1,7 @@
 #ifndef AUDIOHAWK_PIPEWIRE_EQ_H
 #define AUDIOHAWK_PIPEWIRE_EQ_H
 
+#include "audiohawk/advanced.h"
 #include "audiohawk/effects.h"
 #include "audiohawk/equalizer.h"
 #include "audiohawk/profiles.h"
@@ -28,6 +29,8 @@ int ah_pw_eq_apply_bands(AhPipewireEq *eq, const AhEqBand *bands, int n_bands);
 
 /* Push advanced Settings effects into the live DSP chain. */
 int ah_pw_eq_apply_effects(AhPipewireEq *eq, const AhEffectsState *fx);
+int ah_pw_eq_apply_advanced(AhPipewireEq *eq, const AhAdvancedState *adv);
+void ah_pw_eq_advanced_meters(const AhPipewireEq *eq, AhAdvancedMeters *out);
 
 const char *ah_pw_eq_last_error(const AhPipewireEq *eq);
 const char *ah_pw_eq_node_name(void);

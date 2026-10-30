@@ -12,12 +12,22 @@ if(BUILD_TESTING)
         src/core/spatial.c
         src/core/effects.c
         src/core/pitch.c)
+    add_executable(audiohawk_advanced_test
+        tests/advanced_test.c
+        src/core/advanced.c
+        src/core/spatial.c)
     target_include_directories(audiohawk_spatial_test PRIVATE include)
     if(NOT MSVC)
         target_link_libraries(audiohawk_spatial_test PRIVATE m)
         target_compile_options(audiohawk_spatial_test PRIVATE -Wall -Wextra -Werror)
     endif()
     add_test(NAME spatial COMMAND audiohawk_spatial_test)
+    target_include_directories(audiohawk_advanced_test PRIVATE include)
+    if(NOT MSVC)
+        target_link_libraries(audiohawk_advanced_test PRIVATE m)
+        target_compile_options(audiohawk_advanced_test PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME advanced COMMAND audiohawk_advanced_test)
 endif()
 if(AUDIOHAWK_DSP_TESTS_ONLY)
     return()
@@ -37,6 +47,7 @@ add_library(audiohawk_core STATIC
     src/core/effects.c
     src/core/spatial.c
     src/core/pitch.c
+    src/core/advanced.c
     src/core/pipewire_eq.c
     src/core/core.c
 )
@@ -64,6 +75,7 @@ if(AUDIOHAWK_BUILD_GTK)
             src/gtk/dashboard.c
             src/gtk/equalizer_page.c
             src/gtk/settings_page.c
+            src/gtk/advanced_page.c
             src/gtk/icons.c
             src/gtk/tray.c
         )

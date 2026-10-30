@@ -17,10 +17,14 @@ int ah_core_sync_pipeline(AhCore *core)
 
     if (want) {
         (void)ah_pw_eq_apply_effects(core->eq, &core->effects);
+        (void)ah_pw_eq_apply_advanced(core->eq, &core->advanced);
     } else {
         AhEffectsState bypass;
         ah_effects_defaults(&bypass);
         (void)ah_pw_eq_apply_effects(core->eq, &bypass);
+        AhAdvancedState adv_off;
+        ah_advanced_defaults(&adv_off);
+        (void)ah_pw_eq_apply_advanced(core->eq, &adv_off);
     }
 
     if (ah_pw_eq_enable(core->eq, want) != 0) {
@@ -52,6 +56,7 @@ int ah_core_init(AhCore *core)
     ah_app_profiles_load(&core->app_profiles);
     ah_eq_state_load(&core->equalizer);
     ah_effects_load(&core->effects);
+    ah_advanced_load(&core->advanced);
 
     core->eq = ah_pw_eq_create();
     if (!core->eq)
@@ -109,6 +114,17 @@ int ah_core_set_effects(AhCore *core, const AhEffectsState *fx)
     return r;
 }
 
+int ah_core_set_advanced(AhCore *core, const AhAdvancedState *adv)
+{
+    if (!core || !adv)
+        return -1;
+    core->advanced = *adv;
+    ah_advanced_clamp(&core->advanced);
+    int r = ah_core_sync_pipeline(core);
+    ah_advanced_save(&core->advanced);
+    return r;
+}
+
 int ah_core_persist(AhCore *core)
 {
     if (!core)
@@ -117,7 +133,8 @@ int ah_core_persist(AhCore *core)
     int b = ah_app_profiles_save(&core->app_profiles);
     int c = ah_eq_state_save(&core->equalizer);
     int d = ah_effects_save(&core->effects);
-    return (a == 0 && b == 0 && c == 0 && d == 0) ? 0 : -1;
+    int e = ah_advanced_save(&core->advanced);
+    return (a == 0 && b == 0 && c == 0 && d == 0 && e == 0) ? 0 : -1;
 }
 
 int ah_core_set_eq_enabled(AhCore *core, bool enabled)

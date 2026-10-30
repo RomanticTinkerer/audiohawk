@@ -8,6 +8,7 @@
  */
 
 #include "audiohawk/pipewire_eq.h"
+#include "audiohawk/advanced.h"
 #include "audiohawk/config.h"
 #include "audiohawk/effects.h"
 #include "audiohawk/pitch.h"
@@ -114,6 +115,8 @@ struct AhPipewireEq {
     int n_bands;
     AhEqBand bands[AH_EQ_BANDS_MAX];
     AhEffectsState fx;
+    AhAdvancedState adv_state;
+    AhAdvancedEngine *adv;
     char last_error[256];
 
     struct pw_thread_loop *loop;
@@ -928,6 +931,10 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
         memset(&eq->spatial, 0, sizeof(eq->spatial));
         ah_pitch_reset(&eq->pitch);
+        if (eq->adv) {
+            ah_advanced_reset(eq->adv);
+            ah_advanced_apply(eq->adv, &eq->adv_state, rate);
+        }
         eq->leveler_env = 0.f;
         eq->leveler_gain = 1.f;
     }
@@ -1028,12 +1035,16 @@ static void on_filter_process(void *data, struct spa_io_position *position)
         r *= fx->bus_makeup;
         if (fx->pitch != 0)
             ah_pitch_process(&eq->pitch, fx->pitch, &l, &r);
-        /* No bus soft-saturate — that was flattening punch vs bypass. */
-        ah_spatial_limit(&l, &r);
 
         out_l[i] = l;
         out_r[i] = r;
     }
+
+    if (eq->adv)
+        ah_advanced_process_block(eq->adv, out_l, out_r, n_samples, rate);
+
+    for (uint32_t i = 0; i < n_samples; ++i)
+        ah_spatial_limit(&out_l[i], &out_r[i]);
 }
 
 static const struct pw_filter_events filter_events = {
@@ -1426,6 +1437,8 @@ static int arm_graph(AhPipewireEq *eq)
     eq->leveler_env = 0.f;
     memset(&eq->spatial, 0, sizeof(eq->spatial));
     ah_pitch_reset(&eq->pitch);
+    if (eq->adv)
+        ah_advanced_reset(eq->adv);
 
     if (create_virtual_sink(eq) != 0)
         return -1;
@@ -1727,6 +1740,10 @@ AhPipewireEq *ah_pw_eq_create(void)
     atomic_init(&eq->shutting_down, false);
     atomic_init(&eq->recover_busy, false);
     ah_effects_defaults(&eq->fx);
+    ah_advanced_defaults(&eq->adv_state);
+    eq->adv = ah_advanced_create();
+    if (eq->adv)
+        ah_advanced_apply(eq->adv, &eq->adv_state, 48000);
     AhEqBand tmp[AH_EQ_BANDS];
     ah_compose_eq(AH_PROFILE_MUSIC, AH_INTEL_OFF, tmp);
     memcpy(eq->bands, tmp, sizeof(tmp));
@@ -1753,6 +1770,7 @@ void ah_pw_eq_destroy(AhPipewireEq *eq)
     }
 
     disconnect_pw(eq);
+    ah_advanced_destroy(eq->adv);
     free(eq);
 }
 
@@ -1792,6 +1810,29 @@ int ah_pw_eq_apply_effects(AhPipewireEq *eq, const AhEffectsState *fx)
     ah_effects_clamp(&eq->fx);
     rebuild_fx(eq, eq->process_rate ? eq->process_rate : 48000);
     return 0;
+}
+
+int ah_pw_eq_apply_advanced(AhPipewireEq *eq, const AhAdvancedState *adv)
+{
+    if (!eq || !adv)
+        return -1;
+    eq->adv_state = *adv;
+    ah_advanced_clamp(&eq->adv_state);
+    if (eq->adv)
+        ah_advanced_apply(eq->adv, &eq->adv_state,
+                          eq->process_rate ? eq->process_rate : 48000);
+    return 0;
+}
+
+void ah_pw_eq_advanced_meters(const AhPipewireEq *eq, AhAdvancedMeters *out)
+{
+    if (!out)
+        return;
+    if (!eq || !eq->adv) {
+        memset(out, 0, sizeof(*out));
+        return;
+    }
+    ah_advanced_meters(eq->adv, out);
 }
 
 int ah_pw_eq_enable(AhPipewireEq *eq, bool enabled)

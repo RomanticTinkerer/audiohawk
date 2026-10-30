@@ -1,6 +1,7 @@
 #ifndef AUDIOHAWK_CORE_H
 #define AUDIOHAWK_CORE_H
 
+#include "audiohawk/advanced.h"
 #include "audiohawk/app_profiles.h"
 #include "audiohawk/config.h"
 #include "audiohawk/effects.h"
@@ -17,6 +18,7 @@ typedef struct {
     AhAppProfileStore app_profiles;
     AhEqualizerState equalizer;
     AhEffectsState effects;
+    AhAdvancedState advanced;
     AhPipewireEq *eq;
 } AhCore;
 
@@ -38,6 +40,7 @@ int ah_core_set_band_gain(AhCore *core, int index, float gain_db);
 /* Advanced Settings effects — applies live and persists. */
 int ah_core_set_effects(AhCore *core, const AhEffectsState *fx);
 int ah_core_apply_effects(AhCore *core);
+int ah_core_set_advanced(AhCore *core, const AhAdvancedState *adv);
 
 /* Rebuild live bands from Home profile + Intelligent EQ and push to PipeWire. */
 int ah_core_apply_listening(AhCore *core);

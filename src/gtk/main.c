@@ -1,3 +1,4 @@
+#include "advanced_page.h"
 #include "dashboard.h"
 #include "equalizer_page.h"
 #include "icons.h"
@@ -18,7 +19,7 @@ typedef struct {
     GtkWindow *win;
     AdwWindowTitle *title;
     GtkStack *stack;
-    GtkWidget *dock_btns[3];
+    GtkWidget *dock_btns[4];
     GtkWidget *eq_page;
     AhTray *tray;
     gboolean quitting;
@@ -89,22 +90,23 @@ static void load_css(void)
 
 static void set_active_tab(Shell *shell, int index)
 {
-    const char *names[] = { "home", "equalizer", "settings" };
-    const char *titles[] = { "Home", "Equalizer", "Settings" };
+    const char *names[] = { "home", "equalizer", "advanced", "settings" };
+    const char *titles[] = { "Home", "Equalizer", "Advanced", "Settings" };
     const char *subs[] = {
         "Listening profiles",
         "Graphic EQ & PipeWire",
+        "Enhance, fun, process",
         "Preferences"
     };
 
-    if (index < 0 || index > 2)
+    if (index < 0 || index > 3)
         return;
 
     gtk_stack_set_visible_child_name(shell->stack, names[index]);
     adw_window_title_set_title(shell->title, titles[index]);
     adw_window_title_set_subtitle(shell->title, subs[index]);
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         if (i == index)
             gtk_widget_add_css_class(shell->dock_btns[i], "active");
         else
@@ -155,7 +157,8 @@ static GtkWidget *make_dock(Shell *shell)
 
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-home", "Home", 0, shell));
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-eq", "Equalizer", 1, shell));
-    gtk_box_append(GTK_BOX(dock), make_dock_button("nav-settings", "Settings", 2, shell));
+    gtk_box_append(GTK_BOX(dock), make_dock_button("bands", "Advanced", 2, shell));
+    gtk_box_append(GTK_BOX(dock), make_dock_button("nav-settings", "Settings", 3, shell));
 
     gtk_box_append(GTK_BOX(wrap), dock);
     return wrap;
@@ -290,7 +293,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     AdwApplicationWindow *win = ADW_APPLICATION_WINDOW(adw_application_window_new(app));
     shell->win = GTK_WINDOW(win);
     gtk_window_set_title(shell->win, "AudioHawk");
-    gtk_window_set_default_size(shell->win, 720, 820);
+    gtk_window_set_default_size(shell->win, 760, 860);
     apply_window_icon(shell->win);
     g_signal_connect(shell->win, "close-request", G_CALLBACK(on_close_request), shell);
 
@@ -321,10 +324,12 @@ static void on_activate(GtkApplication *app, gpointer user_data)
 
     GtkWidget *home = ah_gtk_dashboard_new(shell->core, toasts);
     shell->eq_page = ah_gtk_equalizer_page_new(shell->core, toasts);
+    GtkWidget *advanced = ah_gtk_advanced_page_new(shell->core, toasts);
     GtkWidget *settings = ah_gtk_settings_page_new(shell->core, toasts);
 
     gtk_stack_add_named(shell->stack, home, "home");
     gtk_stack_add_named(shell->stack, shell->eq_page, "equalizer");
+    gtk_stack_add_named(shell->stack, advanced, "advanced");
     gtk_stack_add_named(shell->stack, settings, "settings");
 
     adw_toolbar_view_set_content(toolbar, GTK_WIDGET(shell->stack));
