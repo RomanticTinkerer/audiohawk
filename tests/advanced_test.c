@@ -125,6 +125,43 @@ int main(void)
     ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
     CHECK(fabsf(l[200] - r[200]) > 0.2f);
 
+    /* Soft-knee compressor pulls a hot tone down. */
+    ah_advanced_reset(eng);
+    ah_advanced_defaults(&s);
+    s.on[AH_ADV_COMPRESSOR] = true;
+    s.amount[AH_ADV_COMPRESSOR] = 90;
+    tone(l, r, n, rate, 440.f, 0.85f);
+    ah_advanced_apply(eng, &s, rate);
+    ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
+    CHECK(peak_of(l + n / 2, r + n / 2, n / 2) < 0.80f);
+
+    /* Bauer crossfeed keeps a sided signal finite and less isolated. */
+    ah_advanced_reset(eng);
+    ah_advanced_defaults(&s);
+    s.on[AH_ADV_CROSSFEED] = true;
+    s.amount[AH_ADV_CROSSFEED] = 100;
+    for (int i = 0; i < n; ++i) {
+        float x = 0.4f * sinf(6.28318530718f * 400.f * (float)i / (float)rate);
+        l[i] = x;
+        r[i] = 0.f;
+    }
+    ah_advanced_apply(eng, &s, rate);
+    ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
+    CHECK(l[300] == l[300] && r[300] == r[300]);
+    CHECK(fabsf(l[300]) < 2.f && fabsf(r[300]) < 2.f);
+    CHECK(fabsf(r[300]) > 0.02f);
+
+    /* K-weighted loudness does not explode a quiet tone. */
+    ah_advanced_reset(eng);
+    ah_advanced_defaults(&s);
+    s.on[AH_ADV_LOUDNESS] = true;
+    s.amount[AH_ADV_LOUDNESS] = 70;
+    tone(l, r, n, rate, 1000.f, 0.05f);
+    ah_advanced_apply(eng, &s, rate);
+    ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
+    CHECK(peak_of(l, r, n) < 0.5f);
+    CHECK(l[100] == l[100] && r[100] == r[100]);
+
     AhAdvancedMeters m;
     ah_advanced_meters(eng, &m);
     CHECK(m.peak >= 0.f);
