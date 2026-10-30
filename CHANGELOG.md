@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - 2026-10-30
+
+### Changed
+- Advanced effects now use studio-grade DSP: Bauer bs2b HighEC crossfeed, ITU-R BS.1770-5 K-weighted loudness, soft-knee RMS compression, and a lookahead true-peak limiter
+- Analog, tube, tape, and distortion use anti-aliased saturation so harmonics stay cleaner
+- Dynamic bass, de-esser, multiband compressor, and transient shaper follow EasyEffects-style time constants
+- Gain matching is smoothed over each block so it no longer pumps
+
 ## 0.3.0 - 2026-10-30
 
 ### Added
