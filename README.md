@@ -63,9 +63,9 @@ curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/downloa
 That downloads the release tarball and copies it to `/usr/local`. Packages are also on [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases):
 
 ```bash
-sudo dpkg -i audiohawk_0.2.0_amd64.deb
-sudo rpm -i audiohawk-0.2.0-1.x86_64.rpm
-chmod +x AudioHawk-0.2.0-x86_64.AppImage
+sudo dpkg -i audiohawk_0.3.0_amd64.deb
+sudo rpm -i audiohawk-0.3.0-1.x86_64.rpm
+chmod +x AudioHawk-0.3.0-x86_64.AppImage
 ```
 
 Build packages locally with `./scripts/package.sh`. After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).
