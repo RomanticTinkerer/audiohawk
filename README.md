@@ -96,12 +96,14 @@ AudioHawk receives two channels, so it cannot recover original object positions 
 height channels. Headphones provide the most controlled result; speakers also mix
 acoustically in the room.
 
-There is no fixed attenuation in the new spatial stage. A shared stereo soft ceiling
-reduces peaks above 0.97 to keep sample amplitudes at or below 1.0 while preserving
-the L/R ratio. Boosts on already loud material can engage that ceiling, and delayed
-signals can interfere at some frequencies, so +25% describes the shelf gain before
-limiting, not a guarantee of 25% greater perceived loudness. The ceiling is not a
-true-peak oversampling limiter.
+AudioHawk sets an automatic preamp from the summed curve of the EQ, enhancers, and
+surround shelves, so a boost never pushes audio past full scale by itself. A 1.5 ms
+lookahead limiter at 0 dBFS sits at the very end and catches what's left (Volume
+Boost, crossfeed, leveler). It turns the gain down smoothly instead of clipping,
+keeps the L/R ratio, and passes anything below the ceiling untouched. Delayed
+signals can still interfere at some frequencies, so +25% describes the shelf gain,
+not 25% more perceived loudness. The output limiter watches sample peaks; the
+Advanced limiter also estimates inter-sample peaks.
 
 Settings persist in `~/.config/audiohawk/effects.conf`:
 

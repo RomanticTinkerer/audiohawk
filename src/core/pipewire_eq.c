@@ -10,6 +10,7 @@
 #include "audiohawk/pipewire_eq.h"
 #include "audiohawk/advanced.h"
 #include "audiohawk/config.h"
+#include "audiohawk/dsp.h"
 #include "audiohawk/effects.h"
 #include "audiohawk/pitch.h"
 #include "audiohawk/spatial.h"
@@ -39,50 +40,25 @@
 #define AH_MAX_LINKS 16
 #define AH_MAX_STREAMS 128
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+/* Fixed slots after the EQ bands: bass HP, shelf, punch, cut, mid, treble. */
+#define AH_TONE_SLOTS 6
+#define AH_CHAIN_MAX (AH_EQ_BANDS_MAX + AH_TONE_SLOTS)
 
 typedef struct {
-    float b0, b1, b2, a1, a2;
-} AhBiquad;
-
-typedef struct {
-    float z1, z2;
-} AhBiquadMem;
-
-typedef struct {
-    AhBiquad bands[AH_EQ_BANDS_MAX];
-    int n_bands;
     uint32_t rate;
-} AhCoeffBank;
-
-typedef struct {
-    bool bass_on;
-    bool mid_on;
-    bool treble_on;
-    bool dialogue_on;
-    bool surround_on;
-    bool leveler_on;
-
-    AhBiquad bass_shelf;
-    AhBiquad bass_punch;
-    AhBiquad bass_lp;
-    AhBiquad mid_peak;
-    AhBiquad treble_shelf;
-    AhBiquad dialogue_peak;
-    AhBiquad dialogue_scoop;
+    int n_chain;
+    AhBiquad chain[AH_CHAIN_MAX]; /* EQ bands then tone slots, stereo */
+    AhBiquad bass_lp;             /* harmonic blend source */
+    AhBiquad dlg[2];              /* dialogue lift + scoop, mid channel only */
+    bool dlg_on;
+    bool lev_on;
+    float harm;
     AhSpatialParams spatial;
-    AhBiquad velvet_body;  /* soft low-mid density */
-    AhBiquad velvet_air;   /* open top for space / reverb tails */
-
-    float bass_harm;   /* 0..0.25 wet */
-    float leveler_amt; /* 0..1 */
-    float volume_gain; /* 1.0..2.0 from volume_boost % */
-    float bus_makeup;  /* slight loudness without harshness */
-    int pitch;         /* semitones, 0 = bypass */
-    uint32_t rate;
-} AhFxBank;
+    float pre_gain;    /* auto preamp: cancels the peak boost of the whole chain */
+    float volume_gain; /* 1.0..2.0 from volume_boost %, caught by the limiter */
+    float k_det, k_dn, k_up, k_s;
+    int pitch;
+} AhDspBank;
 
 typedef struct {
     uint32_t id;
@@ -157,20 +133,18 @@ struct AhPipewireEq {
     char hardware_sink[256];
     uint32_t hardware_sink_id;
 
-    /* Double-buffered coeffs for lock-free RT updates. */
-    AhCoeffBank coeff_banks[2];
-    atomic_int coeff_idx;
-    AhBiquadMem mem_l[AH_EQ_BANDS_MAX];
-    AhBiquadMem mem_r[AH_EQ_BANDS_MAX];
-
-    AhFxBank fx_banks[2];
-    atomic_int fx_idx;
-    AhBiquadMem fx_mem_l[10];
-    AhBiquadMem fx_mem_r[10];
+    /* Double-buffered coeffs; dsp_lock serializes writers, busy guards the RT read. */
+    AhDspBank banks[2];
+    atomic_int dsp_idx;
+    atomic_int dsp_busy;
+    pthread_mutex_t dsp_lock;
+    AhBiquadMem mem[2][AH_CHAIN_MAX];
+    AhBiquadMem lp_mem[2];
+    AhBiquadMem dlg_mem[2];
     AhSpatialState spatial;
     AhPitchState pitch;
-    float leveler_env;
-    float leveler_gain;
+    AhLimiter lim;
+    float pre_g, vol_g, lev_g, lev_ms;
 
     uint32_t process_rate;
 
@@ -250,156 +224,7 @@ static int core_sync(AhPipewireEq *eq)
     return eq->pending_res;
 }
 
-/* ---------- RBJ biquads ---------- */
-
-static void design_unity(AhBiquad *bq)
-{
-    bq->b0 = 1.f;
-    bq->b1 = 0.f;
-    bq->b2 = 0.f;
-    bq->a1 = 0.f;
-    bq->a2 = 0.f;
-}
-
-static void clamp_freq(float *freq, uint32_t rate)
-{
-    if (*freq < 20.f)
-        *freq = 20.f;
-    if (*freq > (float)rate * 0.45f)
-        *freq = (float)rate * 0.45f;
-}
-
-static void design_peaking(AhBiquad *bq, float freq, float q, float gain_db, uint32_t rate)
-{
-    if (rate < 1)
-        rate = 48000;
-    clamp_freq(&freq, rate);
-    if (q < 0.1f)
-        q = 0.1f;
-
-    if (fabsf(gain_db) < 0.01f) {
-        design_unity(bq);
-        return;
-    }
-
-    const float A = powf(10.f, gain_db / 40.f);
-    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
-    const float alpha = sinf(w0) / (2.f * q);
-    const float cosw = cosf(w0);
-
-    const float b0 = 1.f + alpha * A;
-    const float b1 = -2.f * cosw;
-    const float b2 = 1.f - alpha * A;
-    const float a0 = 1.f + alpha / A;
-    const float a1 = -2.f * cosw;
-    const float a2 = 1.f - alpha / A;
-
-    bq->b0 = b0 / a0;
-    bq->b1 = b1 / a0;
-    bq->b2 = b2 / a0;
-    bq->a1 = a1 / a0;
-    bq->a2 = a2 / a0;
-}
-
-static void design_lowshelf(AhBiquad *bq, float freq, float q, float gain_db, uint32_t rate)
-{
-    if (rate < 1)
-        rate = 48000;
-    clamp_freq(&freq, rate);
-    if (q < 0.1f)
-        q = 0.1f;
-    if (fabsf(gain_db) < 0.01f) {
-        design_unity(bq);
-        return;
-    }
-
-    const float A = powf(10.f, gain_db / 40.f);
-    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
-    const float cosw = cosf(w0);
-    const float sinw = sinf(w0);
-    const float alpha = sinw / (2.f * q);
-    const float two_sqrtA_alpha = 2.f * sqrtf(A) * alpha;
-
-    const float b0 = A * ((A + 1.f) - (A - 1.f) * cosw + two_sqrtA_alpha);
-    const float b1 = 2.f * A * ((A - 1.f) - (A + 1.f) * cosw);
-    const float b2 = A * ((A + 1.f) - (A - 1.f) * cosw - two_sqrtA_alpha);
-    const float a0 = (A + 1.f) + (A - 1.f) * cosw + two_sqrtA_alpha;
-    const float a1 = -2.f * ((A - 1.f) + (A + 1.f) * cosw);
-    const float a2 = (A + 1.f) + (A - 1.f) * cosw - two_sqrtA_alpha;
-
-    bq->b0 = b0 / a0;
-    bq->b1 = b1 / a0;
-    bq->b2 = b2 / a0;
-    bq->a1 = a1 / a0;
-    bq->a2 = a2 / a0;
-}
-
-static void design_highshelf(AhBiquad *bq, float freq, float q, float gain_db, uint32_t rate)
-{
-    if (rate < 1)
-        rate = 48000;
-    clamp_freq(&freq, rate);
-    if (q < 0.1f)
-        q = 0.1f;
-    if (fabsf(gain_db) < 0.01f) {
-        design_unity(bq);
-        return;
-    }
-
-    const float A = powf(10.f, gain_db / 40.f);
-    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
-    const float cosw = cosf(w0);
-    const float sinw = sinf(w0);
-    const float alpha = sinw / (2.f * q);
-    const float two_sqrtA_alpha = 2.f * sqrtf(A) * alpha;
-
-    const float b0 = A * ((A + 1.f) + (A - 1.f) * cosw + two_sqrtA_alpha);
-    const float b1 = -2.f * A * ((A - 1.f) + (A + 1.f) * cosw);
-    const float b2 = A * ((A + 1.f) + (A - 1.f) * cosw - two_sqrtA_alpha);
-    const float a0 = (A + 1.f) - (A - 1.f) * cosw + two_sqrtA_alpha;
-    const float a1 = 2.f * ((A - 1.f) - (A + 1.f) * cosw);
-    const float a2 = (A + 1.f) - (A - 1.f) * cosw - two_sqrtA_alpha;
-
-    bq->b0 = b0 / a0;
-    bq->b1 = b1 / a0;
-    bq->b2 = b2 / a0;
-    bq->a1 = a1 / a0;
-    bq->a2 = a2 / a0;
-}
-
-static void design_lowpass(AhBiquad *bq, float freq, float q, uint32_t rate)
-{
-    if (rate < 1)
-        rate = 48000;
-    clamp_freq(&freq, rate);
-    if (q < 0.1f)
-        q = 0.1f;
-
-    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
-    const float cosw = cosf(w0);
-    const float alpha = sinf(w0) / (2.f * q);
-
-    const float b0 = (1.f - cosw) * 0.5f;
-    const float b1 = 1.f - cosw;
-    const float b2 = (1.f - cosw) * 0.5f;
-    const float a0 = 1.f + alpha;
-    const float a1 = -2.f * cosw;
-    const float a2 = 1.f - alpha;
-
-    bq->b0 = b0 / a0;
-    bq->b1 = b1 / a0;
-    bq->b2 = b2 / a0;
-    bq->a1 = a1 / a0;
-    bq->a2 = a2 / a0;
-}
-
-static float biquad_process(const AhBiquad *bq, AhBiquadMem *m, float x)
-{
-    const float y = bq->b0 * x + m->z1;
-    m->z1 = bq->b1 * x - bq->a1 * y + m->z2;
-    m->z2 = bq->b2 * x - bq->a2 * y;
-    return y;
-}
+/* ---------- DSP banks ---------- */
 
 static float soft_saturate(float x)
 {
@@ -411,120 +236,134 @@ static float soft_saturate(float x)
     return x - (x * x * x) * (1.f / 9.f);
 }
 
-static void rebuild_coeffs(AhPipewireEq *eq, uint32_t rate)
+static float tc(double sec, uint32_t rate)
 {
-    if (rate < 1)
-        rate = eq->process_rate ? eq->process_rate : 48000;
-
-    const int wi = 1 - atomic_load_explicit(&eq->coeff_idx, memory_order_relaxed);
-    AhCoeffBank *bank = &eq->coeff_banks[wi];
-    bank->n_bands = eq->n_bands > 0 ? eq->n_bands : 10;
-    if (bank->n_bands > AH_EQ_BANDS_MAX)
-        bank->n_bands = AH_EQ_BANDS_MAX;
-    bank->rate = rate;
-
-    for (int i = 0; i < bank->n_bands; ++i) {
-        float g = eq->eq_active ? eq->bands[i].gain_db : 0.f;
-        design_peaking(&bank->bands[i],
-                       eq->bands[i].freq_hz,
-                       eq->bands[i].q > 0.f ? eq->bands[i].q : 1.1f,
-                       g,
-                       rate);
-    }
-    atomic_store_explicit(&eq->coeff_idx, wi, memory_order_release);
+    return (float)(1.0 - exp(-1.0 / (sec * rate)));
 }
 
-static void rebuild_fx(AhPipewireEq *eq, uint32_t rate)
+/* Snaps once float rounding stalls the step, so unity really lands on 1.0. */
+static float glide(float g, float target, float k)
 {
-    if (rate < 1)
-        rate = eq->process_rate ? eq->process_rate : 48000;
+    const float n = g + (target - g) * k;
+    return (n == g || fabsf(target - n) < 1e-6f) ? target : n;
+}
 
+static void rebuild_dsp_locked(AhPipewireEq *eq, uint32_t rate)
+{
     AhEffectsState fx = eq->fx;
     ah_effects_clamp(&fx);
 
-    const int wi = 1 - atomic_load_explicit(&eq->fx_idx, memory_order_relaxed);
-    AhFxBank *b = &eq->fx_banks[wi];
+    const int wi = ah_ui_slot(&eq->dsp_idx, &eq->dsp_busy);
+    AhDspBank *b = &eq->banks[wi];
     memset(b, 0, sizeof(*b));
     b->rate = rate;
-    b->bass_on = fx.bass_enhancer;
-    b->mid_on = fx.mid_enhancer;
-    b->treble_on = fx.treble_enhancer;
-    b->dialogue_on = fx.dialogue_enhancer;
-    b->surround_on = fx.surround_virtualizer;
-    b->leveler_on = fx.volume_leveler;
 
-    const float bass_amt = fx.bass_level / 100.f;
-    const float mid_amt = fx.mid_level / 100.f;
-    const float treble_amt = fx.treble_level / 100.f;
-    const float dlg_amt = fx.dialogue_strength / 10.f;
-    /* +55% on bass, treble, and voice/presence paths. */
-    const float tone_boost = 1.55f;
+    int nb = eq->n_bands > 0 ? eq->n_bands : 10;
+    if (nb > AH_EQ_BANDS_MAX)
+        nb = AH_EQ_BANDS_MAX;
+    b->n_chain = nb + AH_TONE_SLOTS;
+    for (int i = 0; i < b->n_chain; ++i)
+        ah_bq_unity(&b->chain[i]);
+    if (eq->eq_active)
+        ah_geq_design(eq->bands, nb, rate, b->chain);
 
-    design_unity(&b->bass_shelf);
-    design_unity(&b->bass_punch);
-    design_lowpass(&b->bass_lp, 180.f, 0.707f, rate);
-    b->bass_harm = 0.f;
+    AhBiquad *t = b->chain + nb; /* 0 HP, 1 shelf, 2 punch, 3 cut, 4 mid, 5 treble */
+    const double bass = fx.bass_enhancer ? fx.bass_level / 100.0 : 0.0;
+    const double mid = fx.mid_enhancer ? fx.mid_level / 100.0 : 0.0;
+    const double treble = fx.treble_enhancer ? fx.treble_level / 100.0 : 0.0;
+    const double dlg = fx.dialogue_enhancer ? fx.dialogue_strength / 10.0 : 0.0;
 
-    if (b->bass_on && bass_amt > 0.01f) {
+    if (bass > 0.01) {
+        /* Subsonic guard so the shelf spends headroom on audible bass, not rumble. */
+        ah_bq_highpass(&t[0], 18.0, 0.707, rate);
         switch (fx.bass_curve) {
         case AH_BASS_CURVE_SUB_BOOST:
-            design_lowshelf(&b->bass_shelf, 48.f, 0.7f, bass_amt * 9.5f * tone_boost, rate);
-            b->bass_harm = bass_amt * 0.10f * tone_boost;
+            ah_bq_lowshelf(&t[1], 50.0, 0.707, 9.0 * bass, rate);
+            b->harm = (float)(0.08 * bass);
             break;
         case AH_BASS_CURVE_PUNCH:
-            /* Hard mid-bass hit — transient weight without muddy sub bloom. */
-            design_lowshelf(&b->bass_shelf, 95.f, 0.8f, bass_amt * 7.0f * tone_boost, rate);
-            design_peaking(&b->bass_punch, 145.f, 1.7f, bass_amt * 8.2f * tone_boost, rate);
-            b->bass_harm = bass_amt * 0.06f * tone_boost;
+            ah_bq_peaking(&t[2], 90.0, 1.2, 7.0 * bass, rate);
+            ah_bq_peaking(&t[3], 300.0, 1.0, -2.0 * bass, rate);
+            b->harm = (float)(0.05 * bass);
             break;
         case AH_BASS_CURVE_BALANCED:
         default:
-            design_lowshelf(&b->bass_shelf, 85.f, 0.72f, bass_amt * 7.5f * tone_boost, rate);
-            design_peaking(&b->bass_punch, 220.f, 0.9f, bass_amt * 1.8f * tone_boost, rate);
-            b->bass_harm = bass_amt * 0.04f * tone_boost;
+            ah_bq_lowshelf(&t[1], 90.0, 0.707, 8.0 * bass, rate);
+            b->harm = (float)(0.04 * bass);
             break;
         }
+        ah_bq_lowpass(&b->bass_lp, 180.0, 0.707, rate);
+    }
+    if (mid > 0.01)
+        ah_bq_peaking(&t[4], 1000.0, 0.7, 4.5 * mid, rate);
+    if (treble > 0.01)
+        ah_bq_highshelf(&t[5], 8000.0, 0.707, 6.0 * treble, rate);
+    b->dlg_on = dlg > 0.01;
+    if (b->dlg_on) {
+        ah_bq_peaking(&b->dlg[0], 2500.0, 1.0, 6.0 * dlg, rate);
+        ah_bq_peaking(&b->dlg[1], 250.0, 0.9, -2.0 * dlg, rate);
     }
 
-    /* Voice body / presence. */
-    if (b->mid_on && mid_amt > 0.01f)
-        design_peaking(&b->mid_peak, 780.f, 0.85f, mid_amt * 5.0f * tone_boost, rate);
-    else
-        design_unity(&b->mid_peak);
-
-    /* Soft sheen — keep air open for space/reverb. */
-    if (b->treble_on && treble_amt > 0.01f)
-        design_highshelf(&b->treble_shelf, 7500.f, 0.65f, treble_amt * 5.0f * tone_boost, rate);
-    else
-        design_unity(&b->treble_shelf);
-
-    if (b->dialogue_on && dlg_amt > 0.01f) {
-        design_peaking(&b->dialogue_peak, 2400.f, 1.15f, dlg_amt * 5.5f * tone_boost, rate);
-        /* Mild scoop only — deep cuts kill punch vs the direct path. */
-        design_peaking(&b->dialogue_scoop, 200.f, 0.9f, -dlg_amt * 0.8f, rate);
-    } else {
-        design_unity(&b->dialogue_peak);
-        design_unity(&b->dialogue_scoop);
-    }
-
-    ah_spatial_configure(&b->spatial, rate, b->surround_on,
+    ah_spatial_configure(&b->spatial, rate, fx.surround_virtualizer,
                          fx.surround_amount, fx.surround_bass, fx.surround_treble);
 
-    /* Punch body + open air (+55% with bass/treble/voice lift). */
-    design_peaking(&b->velvet_body, 170.f, 1.0f, 2.4f * 1.55f, rate);
-    design_highshelf(&b->velvet_air, 7200.f, 0.7f, 1.8f * 1.55f, rate);
+    /* Auto preamp: the loudest point of the summed curve lands at 0 dB. */
+    const double top = fmin(20000.0, rate * 0.45);
+    double peak = 0.0;
+    for (int k = 0; k < 96; ++k) {
+        const double f = 20.0 * pow(top / 20.0, k / 95.0);
+        double db = 0.0;
+        for (int i = 0; i < b->n_chain; ++i)
+            db += ah_bq_mag_db(&b->chain[i], f, rate);
+        if (b->harm > 0.f)
+            db += 20.0 * log10(1.0 + 1.15 * b->harm *
+                                         pow(10.0, ah_bq_mag_db(&b->bass_lp, f, rate) / 20.0));
+        if (b->dlg_on)
+            db += ah_bq_mag_db(&b->dlg[0], f, rate) + ah_bq_mag_db(&b->dlg[1], f, rate);
+        if (b->spatial.enabled)
+            db += ah_bq_mag_db(&b->spatial.bass, f, rate) +
+                  ah_bq_mag_db(&b->spatial.treble, f, rate);
+        if (db > peak)
+            peak = db;
+    }
+    b->pre_gain = (float)pow(10.0, -peak / 20.0);
 
-    b->leveler_amt = b->leveler_on ? 0.35f : 0.f; /* very light — keep punch/space */
+    b->lev_on = fx.volume_leveler;
     b->volume_gain = fx.volume_boost / 100.f;
     if (b->volume_gain < 1.f)
         b->volume_gain = 1.f;
     if (b->volume_gain > 2.f)
         b->volume_gain = 2.f;
-    /* Fixed loudness floor vs direct hardware path (not the Boost slider). */
-    b->bus_makeup = 1.07f * 1.20f * 1.18f;
+    b->k_det = tc(0.4, rate);
+    b->k_dn = tc(1.0, rate);
+    b->k_up = tc(3.0, rate);
+    b->k_s = tc(0.02, rate);
     b->pitch = fx.pitch;
 
-    atomic_store_explicit(&eq->fx_idx, wi, memory_order_release);
+    atomic_store(&eq->dsp_idx, wi);
+}
+
+static void rebuild_dsp(AhPipewireEq *eq)
+{
+    pthread_mutex_lock(&eq->dsp_lock);
+    rebuild_dsp_locked(eq, eq->process_rate ? eq->process_rate : 48000);
+    pthread_mutex_unlock(&eq->dsp_lock);
+}
+
+static void reset_dsp_state(AhPipewireEq *eq, uint32_t rate)
+{
+    memset(eq->mem, 0, sizeof(eq->mem));
+    memset(eq->lp_mem, 0, sizeof(eq->lp_mem));
+    memset(eq->dlg_mem, 0, sizeof(eq->dlg_mem));
+    memset(&eq->spatial, 0, sizeof(eq->spatial));
+    ah_pitch_reset(&eq->pitch);
+    ah_limiter_init(&eq->lim, rate, 0.f, 1.5f, 60.f, false);
+    eq->pre_g = 0.f; /* 20 ms fade-in instead of a start click */
+    eq->vol_g = 1.f;
+    eq->lev_g = 1.f;
+    eq->lev_ms = 0.04f;
+    if (eq->adv)
+        ah_advanced_reset(eq->adv);
 }
 
 /* ---------- registry bookkeeping ---------- */
@@ -919,24 +758,18 @@ static void on_filter_process(void *data, struct spa_io_position *position)
     if (!position)
         return;
 
+    ah_dsp_no_denormals();
+
     const uint32_t n_samples = position->clock.duration;
     const uint32_t rate = (uint32_t)position->clock.rate.denom;
-    if (rate > 0 && rate != eq->process_rate) {
+    /* Rare: redesign here, or next cycle if the UI holds the lock right now. */
+    if (rate > 0 && rate != eq->process_rate && pthread_mutex_trylock(&eq->dsp_lock) == 0) {
         eq->process_rate = rate;
-        rebuild_coeffs(eq, rate);
-        rebuild_fx(eq, rate);
-        memset(eq->mem_l, 0, sizeof(eq->mem_l));
-        memset(eq->mem_r, 0, sizeof(eq->mem_r));
-        memset(eq->fx_mem_l, 0, sizeof(eq->fx_mem_l));
-        memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
-        memset(&eq->spatial, 0, sizeof(eq->spatial));
-        ah_pitch_reset(&eq->pitch);
-        if (eq->adv) {
-            ah_advanced_reset(eq->adv);
+        rebuild_dsp_locked(eq, rate);
+        reset_dsp_state(eq, rate);
+        if (eq->adv)
             ah_advanced_apply(eq->adv, &eq->adv_state, rate);
-        }
-        eq->leveler_env = 0.f;
-        eq->leveler_gain = 1.f;
+        pthread_mutex_unlock(&eq->dsp_lock);
     }
 
     float *in_l = pw_filter_get_dsp_buffer(eq->port_in_l, n_samples);
@@ -947,104 +780,65 @@ static void on_filter_process(void *data, struct spa_io_position *position)
     if (!out_l || !out_r)
         return;
 
-    const int ri = atomic_load_explicit(&eq->coeff_idx, memory_order_acquire);
-    const AhCoeffBank *bank = &eq->coeff_banks[ri];
-    const int nb = bank->n_bands;
+    const AhDspBank *b = &eq->banks[ah_rt_acquire(&eq->dsp_idx, &eq->dsp_busy)];
 
-    const int fi = atomic_load_explicit(&eq->fx_idx, memory_order_acquire);
-    const AhFxBank *fx = &eq->fx_banks[fi];
-
-    /* mem: 0 shelf, 1 punch, 2 lp, 3 mid, 4 treble, 5 dialogue,
-     *      6 scoop, 7 unused, 8 velvet_body, 9 velvet_air */
     for (uint32_t i = 0; i < n_samples; ++i) {
-        float l = in_l ? in_l[i] : 0.f;
-        float r = in_r ? in_r[i] : 0.f;
+        eq->pre_g = glide(eq->pre_g, b->pre_gain, b->k_s);
+        double l = (in_l ? in_l[i] : 0.f) * eq->pre_g;
+        double r = (in_r ? in_r[i] : 0.f) * eq->pre_g;
 
-        for (int b = 0; b < nb; ++b) {
-            l = biquad_process(&bank->bands[b], &eq->mem_l[b], l);
-            r = biquad_process(&bank->bands[b], &eq->mem_r[b], r);
+        for (int k = 0; k < b->n_chain; ++k) {
+            l = ah_bq_run(&b->chain[k], &eq->mem[0][k], l);
+            r = ah_bq_run(&b->chain[k], &eq->mem[1][k], r);
         }
 
-        if (fx->bass_on) {
-            l = biquad_process(&fx->bass_shelf, &eq->fx_mem_l[0], l);
-            r = biquad_process(&fx->bass_shelf, &eq->fx_mem_r[0], r);
-            l = biquad_process(&fx->bass_punch, &eq->fx_mem_l[1], l);
-            r = biquad_process(&fx->bass_punch, &eq->fx_mem_r[1], r);
-            if (fx->bass_harm > 0.001f) {
-                float bl = biquad_process(&fx->bass_lp, &eq->fx_mem_l[2], l);
-                float br = biquad_process(&fx->bass_lp, &eq->fx_mem_r[2], r);
-                l += soft_saturate(bl * 1.15f) * fx->bass_harm;
-                r += soft_saturate(br * 1.15f) * fx->bass_harm;
+        if (b->harm > 0.f) {
+            l += soft_saturate((float)ah_bq_run(&b->bass_lp, &eq->lp_mem[0], l) * 1.15f) * b->harm;
+            r += soft_saturate((float)ah_bq_run(&b->bass_lp, &eq->lp_mem[1], r) * 1.15f) * b->harm;
+        }
+
+        /* Voice lives in the center, so lift it there and leave the sides alone. */
+        if (b->dlg_on) {
+            const double s = 0.5 * (l - r);
+            double m = 0.5 * (l + r);
+            m = ah_bq_run(&b->dlg[0], &eq->dlg_mem[0], m);
+            m = ah_bq_run(&b->dlg[1], &eq->dlg_mem[1], m);
+            l = m + s;
+            r = m - s;
+        }
+
+        float fl = (float)l, fr = (float)r;
+        ah_spatial_process(&eq->spatial, &b->spatial, &fl, &fr);
+
+        /* Slow RMS leveler toward -14 dBFS, within -10..+6 dB; holds through silence. */
+        if (b->lev_on) {
+            eq->lev_ms += (0.5f * (fl * fl + fr * fr) - eq->lev_ms) * b->k_det;
+            if (eq->lev_ms > 1e-5f) {
+                float want = 0.2f / sqrtf(eq->lev_ms);
+                want = want < 0.316f ? 0.316f : (want > 2.f ? 2.f : want);
+                eq->lev_g += (want - eq->lev_g) * (want < eq->lev_g ? b->k_dn : b->k_up);
             }
+        } else {
+            eq->lev_g = glide(eq->lev_g, 1.f, b->k_s);
         }
+        eq->vol_g = glide(eq->vol_g, b->volume_gain, b->k_s);
+        const float g = eq->lev_g * eq->vol_g;
+        fl *= g;
+        fr *= g;
 
-        if (fx->mid_on) {
-            l = biquad_process(&fx->mid_peak, &eq->fx_mem_l[3], l);
-            r = biquad_process(&fx->mid_peak, &eq->fx_mem_r[3], r);
-        }
+        ah_pitch_process(&eq->pitch, b->pitch, &fl, &fr);
 
-        if (fx->treble_on) {
-            l = biquad_process(&fx->treble_shelf, &eq->fx_mem_l[4], l);
-            r = biquad_process(&fx->treble_shelf, &eq->fx_mem_r[4], r);
-        }
-
-        if (fx->dialogue_on) {
-            l = biquad_process(&fx->dialogue_scoop, &eq->fx_mem_l[6], l);
-            r = biquad_process(&fx->dialogue_scoop, &eq->fx_mem_r[6], r);
-            l = biquad_process(&fx->dialogue_peak, &eq->fx_mem_l[5], l);
-            r = biquad_process(&fx->dialogue_peak, &eq->fx_mem_r[5], r);
-        }
-
-        l = biquad_process(&fx->velvet_body, &eq->fx_mem_l[8], l);
-        r = biquad_process(&fx->velvet_body, &eq->fx_mem_r[8], r);
-        l = biquad_process(&fx->velvet_air, &eq->fx_mem_l[9], l);
-        r = biquad_process(&fx->velvet_air, &eq->fx_mem_r[9], r);
-
-        ah_spatial_process(&eq->spatial, &fx->spatial, &l, &r);
-
-        if (fx->leveler_on && fx->leveler_amt > 0.f) {
-            const float mag = 0.5f * (fabsf(l) + fabsf(r));
-            const float atk = 0.002f;
-            const float rel = 0.0018f;
-            if (mag > eq->leveler_env)
-                eq->leveler_env += (mag - eq->leveler_env) * atk;
-            else
-                eq->leveler_env += (mag - eq->leveler_env) * rel;
-
-            const float target = 0.30f;
-            float desired = 1.f;
-            if (eq->leveler_env > 1e-5f)
-                desired = target / eq->leveler_env;
-            if (desired > 1.35f)
-                desired = 1.35f;
-            if (desired < 0.75f)
-                desired = 0.75f;
-
-            eq->leveler_gain += (desired - eq->leveler_gain) * 0.008f;
-            const float g = 1.f + (eq->leveler_gain - 1.f) * fx->leveler_amt;
-            l *= g;
-            r *= g;
-        }
-
-        if (fx->volume_gain > 1.001f) {
-            l *= fx->volume_gain;
-            r *= fx->volume_gain;
-        }
-
-        l *= fx->bus_makeup;
-        r *= fx->bus_makeup;
-        if (fx->pitch != 0)
-            ah_pitch_process(&eq->pitch, fx->pitch, &l, &r);
-
-        out_l[i] = l;
-        out_r[i] = r;
+        out_l[i] = fl;
+        out_r[i] = fr;
     }
 
     if (eq->adv)
         ah_advanced_process_block(eq->adv, out_l, out_r, n_samples, rate);
 
     for (uint32_t i = 0; i < n_samples; ++i)
-        ah_spatial_limit(&out_l[i], &out_r[i]);
+        ah_limiter_tick(&eq->lim, &out_l[i], &out_r[i]);
+
+    ah_rt_release(&eq->dsp_busy);
 }
 
 static const struct pw_filter_events filter_events = {
@@ -1427,18 +1221,8 @@ static int arm_graph(AhPipewireEq *eq)
         snprintf(eq->hardware_sink, sizeof(eq->hardware_sink), "%s", eq->default_sink);
     }
 
-    rebuild_coeffs(eq, eq->process_rate ? eq->process_rate : 48000);
-    rebuild_fx(eq, eq->process_rate ? eq->process_rate : 48000);
-    memset(eq->mem_l, 0, sizeof(eq->mem_l));
-    memset(eq->mem_r, 0, sizeof(eq->mem_r));
-    memset(eq->fx_mem_l, 0, sizeof(eq->fx_mem_l));
-    memset(eq->fx_mem_r, 0, sizeof(eq->fx_mem_r));
-    eq->leveler_gain = 1.f;
-    eq->leveler_env = 0.f;
-    memset(&eq->spatial, 0, sizeof(eq->spatial));
-    ah_pitch_reset(&eq->pitch);
-    if (eq->adv)
-        ah_advanced_reset(eq->adv);
+    rebuild_dsp(eq);
+    reset_dsp_state(eq, eq->process_rate ? eq->process_rate : 48000);
 
     if (create_virtual_sink(eq) != 0)
         return -1;
@@ -1733,9 +1517,9 @@ AhPipewireEq *ah_pw_eq_create(void)
 
     eq->n_bands = 10;
     eq->eq_active = true;
-    eq->leveler_gain = 1.f;
-    atomic_init(&eq->coeff_idx, 0);
-    atomic_init(&eq->fx_idx, 0);
+    atomic_init(&eq->dsp_idx, 0);
+    atomic_init(&eq->dsp_busy, -1);
+    pthread_mutex_init(&eq->dsp_lock, NULL);
     atomic_init(&eq->disconnected, false);
     atomic_init(&eq->shutting_down, false);
     atomic_init(&eq->recover_busy, false);
@@ -1747,8 +1531,8 @@ AhPipewireEq *ah_pw_eq_create(void)
     AhEqBand tmp[AH_EQ_BANDS];
     ah_compose_eq(AH_PROFILE_MUSIC, AH_INTEL_OFF, tmp);
     memcpy(eq->bands, tmp, sizeof(tmp));
-    rebuild_coeffs(eq, 48000);
-    rebuild_fx(eq, 48000);
+    rebuild_dsp(eq);
+    reset_dsp_state(eq, 48000);
     (void)connect_pw(eq);
     start_recover_thread(eq);
     return eq;
@@ -1771,6 +1555,7 @@ void ah_pw_eq_destroy(AhPipewireEq *eq)
 
     disconnect_pw(eq);
     ah_advanced_destroy(eq->adv);
+    pthread_mutex_destroy(&eq->dsp_lock);
     free(eq);
 }
 
@@ -1784,7 +1569,7 @@ void ah_pw_eq_set_eq_active(AhPipewireEq *eq, bool active)
     if (!eq)
         return;
     eq->eq_active = active;
-    rebuild_coeffs(eq, eq->process_rate ? eq->process_rate : 48000);
+    rebuild_dsp(eq);
 }
 
 int ah_pw_eq_apply_bands(AhPipewireEq *eq, const AhEqBand *bands, int n_bands)
@@ -1798,7 +1583,7 @@ int ah_pw_eq_apply_bands(AhPipewireEq *eq, const AhEqBand *bands, int n_bands)
     memset(eq->bands, 0, sizeof(eq->bands));
     memcpy(eq->bands, bands, sizeof(AhEqBand) * (size_t)n_bands);
 
-    rebuild_coeffs(eq, eq->process_rate ? eq->process_rate : 48000);
+    rebuild_dsp(eq);
     return 0;
 }
 
@@ -1808,7 +1593,7 @@ int ah_pw_eq_apply_effects(AhPipewireEq *eq, const AhEffectsState *fx)
         return -1;
     eq->fx = *fx;
     ah_effects_clamp(&eq->fx);
-    rebuild_fx(eq, eq->process_rate ? eq->process_rate : 48000);
+    rebuild_dsp(eq);
     return 0;
 }
 
@@ -1818,9 +1603,11 @@ int ah_pw_eq_apply_advanced(AhPipewireEq *eq, const AhAdvancedState *adv)
         return -1;
     eq->adv_state = *adv;
     ah_advanced_clamp(&eq->adv_state);
+    pthread_mutex_lock(&eq->dsp_lock);
     if (eq->adv)
         ah_advanced_apply(eq->adv, &eq->adv_state,
                           eq->process_rate ? eq->process_rate : 48000);
+    pthread_mutex_unlock(&eq->dsp_lock);
     return 0;
 }
 
@@ -1875,8 +1662,7 @@ int ah_pw_eq_enable(AhPipewireEq *eq, bool enabled)
     }
 
     eq->enabled = false;
-    rebuild_coeffs(eq, eq->process_rate ? eq->process_rate : 48000);
-    rebuild_fx(eq, eq->process_rate ? eq->process_rate : 48000);
+    rebuild_dsp(eq);
     teardown_graph(eq);
     set_err(eq, "");
     pw_thread_loop_unlock(eq->loop);

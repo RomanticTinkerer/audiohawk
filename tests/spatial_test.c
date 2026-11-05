@@ -1,4 +1,5 @@
 #include "audiohawk/spatial.h"
+#include "audiohawk/dsp.h"
 #include "audiohawk/effects.h"
 #include "audiohawk/pitch.h"
 #include <math.h>
@@ -98,21 +99,64 @@ int main(void)
         }
         printf("%u Hz: bass %.4fx, treble %.4fx; symmetry, bass retention, bypass OK\n", rate, bass, treble);
     }
+    static AhLimiter lim;
+    ah_limiter_init(&lim, 48000, 0.f, 1.5f, 60.f, false);
+    for (int i = 0; i < 10000; ++i) {
+        float x = 0.9f * sinf(i * 0.05f), l = x, r = -0.5f * x;
+        ah_limiter_tick(&lim, &l, &r);
+        if (i >= lim.look) /* below the ceiling: bit-exact, just delayed */
+            CHECK(l == 0.9f * sinf((i - lim.look) * 0.05f) && r == -0.5f * l);
+    }
     for (int i = 0; i < 10000; ++i) {
         float l = i * 0.01f, r = -l * 0.5f;
-        ah_spatial_limit(&l, &r);
+        ah_limiter_tick(&lim, &l, &r);
         CHECK(fabsf(l) <= 1.f && fabsf(r) <= 1.f);
         CHECK(fabsf(r + l * 0.5f) < 1e-6f);
     }
     /* Maximum controls and a rate change must remain bounded after limiting. */
     AhSpatialParams p;
     ah_spatial_configure(&p, 48000, true, 100, 100, 100);
+    float worst_step = 0.f, last = 0.f;
     for (int i = 0; i < 96000; ++i) {
         if (i == 48000) ah_spatial_configure(&p, 96000, true, 100, 100, 100);
         float l = 4.f * sinf(i * 0.013f), r = 3.f * cosf(i * 0.057f);
         ah_spatial_process(&a, &p, &l, &r);
-        ah_spatial_limit(&l, &r);
+        ah_limiter_tick(&lim, &l, &r);
         CHECK(isfinite(l) && isfinite(r) && fabsf(l) <= 1.f && fabsf(r) <= 1.f);
+        if (i > 1000 && i < 48000 && fabsf(l - last) > worst_step) worst_step = fabsf(l - last);
+        last = l;
+    }
+    /* Smooth gain, no clipping corners: steps stay near the sine's own slope. */
+    CHECK(worst_step < 0.1f);
+
+    /* Graphic EQ lands on the drawn curve despite band overlap. */
+    {
+        static const float fq[10] = {32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+        static const float shapes[3][10] = {
+            {6, 6, 6, 6, 6, 6, 6, 6, 6, 6},
+            {6, -6, 6, -6, 6, -6, 6, -6, 6, -6},
+            {12, 9, 4, 0, -3, -3, 0, 4, 9, 12},
+        };
+        for (int s = 0; s < 3; ++s) {
+            AhEqBand bands[10];
+            AhBiquad bq[10];
+            for (int i = 0; i < 10; ++i) {
+                bands[i].freq_hz = fq[i];
+                bands[i].q = 0.667f;
+                bands[i].gain_db = shapes[s][i];
+            }
+            ah_geq_design(bands, 10, 48000, bq);
+            double worst = 0.0;
+            for (int i = 0; i < 10; ++i) {
+                double db = 0.0;
+                for (int m = 0; m < 10; ++m)
+                    db += ah_bq_mag_db(&bq[m], fq[i], 48000);
+                if (fabs(db - shapes[s][i]) > worst)
+                    worst = fabs(db - shapes[s][i]);
+            }
+            printf("geq shape %d: worst band error %.2f dB\n", s, worst);
+            CHECK(worst < (s == 1 ? 1.5 : 0.5));
+        }
     }
     memset(&a, 0, sizeof(a));
     for (int i = 0; i < 96000; ++i) {
@@ -154,6 +198,22 @@ int main(void)
         }
         CHECK(zc0 > 400 && zc0 < 480);
         CHECK(zc12 > zc0);
+    }
+    {
+        /* No clicks: shifting, changing, and switching off stay near the sine's slope. */
+        AhPitchState ps;
+        ah_pitch_reset(&ps);
+        float jump = 0.f, prev = 0.f;
+        for (int i = 0; i < 192000; ++i) {
+            const int st = i < 96000 ? 3 : (i < 144000 ? -5 : 0);
+            float l = 0.5f * sinf(6.28318530718f * 440.f * i / 48000.f), r = l;
+            ah_pitch_process(&ps, st, &l, &r);
+            if (i > 0 && fabsf(l - prev) > jump)
+                jump = fabsf(l - prev);
+            prev = l;
+        }
+        printf("pitch: biggest sample step %.4f (clean sine 0.0288)\n", jump);
+        CHECK(jump < 0.06f);
     }
     puts("All spatial DSP and settings checks passed.");
     return 0;
