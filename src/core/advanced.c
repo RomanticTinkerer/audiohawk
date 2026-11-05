@@ -4,6 +4,7 @@
 
 #include "audiohawk/advanced.h"
 #include "audiohawk/config.h"
+#include "audiohawk/dsp.h"
 #include "audiohawk/spatial.h"
 
 #include <math.h>
@@ -20,7 +21,6 @@
 #define AH_ADV_IR 256
 #define AH_ADV_COMB 4096
 #define AH_ADV_XDEL 96
-#define AH_ADV_LA 256
 #define AH_ADV_FILT 40
 
 typedef struct {
@@ -60,7 +60,6 @@ typedef struct {
     int speak_delay;
     /* libbs2b HighEC / LowEC coeffs, same family EasyEffects uses. */
     float bs2b_a0lo, bs2b_b1lo, bs2b_a0hi, bs2b_a1hi, bs2b_b1hi;
-    int la_len;
     float la_ceil;
     float comp_thr, comp_ratio, comp_knee, comp_atk, comp_rel, comp_makeup;
     float loud_target;
@@ -69,6 +68,7 @@ typedef struct {
 struct AhAdvancedEngine {
     AhAdvBank banks[2];
     atomic_int idx;
+    atomic_int busy;
     uint32_t rate;
     AhBqZ mem[2][F_COUNT];
     AhSpatialState spatial;
@@ -85,14 +85,10 @@ struct AhAdvancedEngine {
     float noise_floor[3];
     float bs2b_lo[2], bs2b_hi[2];
     float adaa[16];
-    float la[2][AH_ADV_LA];
-    int la_i;
-    float la_g;
+    AhLimiter lim;
     float gm_g;
     float loud_g;
     float agc_g;
-    float hold_n;
-    float la_prev[2];
     float comb_lp[2][4];
     float lofi_hold[2];
     int lofi_n;
@@ -831,16 +827,6 @@ static float comp_gain(float *rms, float det, float atk, float rel,
     return db2lin(-gr + makeup_db);
 }
 
-/* 4x linear true-peak estimate (ITU-R BS.1770 oversample idea, cheap). */
-static float truepeak4(float a, float b)
-{
-    float p = fmaxf(fabsf(a), fabsf(b));
-    p = fmaxf(p, fabsf(0.75f * a + 0.25f * b));
-    p = fmaxf(p, fabsf(0.5f * a + 0.5f * b));
-    p = fmaxf(p, fabsf(0.25f * a + 0.75f * b));
-    return p;
-}
-
 /* ITU-R BS.1770-5 / libebur128 analog prototypes, bilinear + pre-warp. */
 static void design_k_shelf(AhBq *bq, uint32_t rate)
 {
@@ -1012,13 +998,8 @@ static void design_bank(AhAdvBank *b, const AhAdvancedState *s, uint32_t rate)
     b->comp_rel = tau_coeff(100.f, rate);
     b->comp_makeup = b->amt[AH_ADV_COMPRESSOR] * 3.5f;
 
-    /* LSP-style ceiling around -0.3 to -1.8 dBTP, 1.5 to 2.5 ms lookahead. */
+    /* LSP-style ceiling around -0.3 to -1.8 dBTP. */
     b->la_ceil = db2lin(-0.3f - b->amt[AH_ADV_LIMITER] * 1.5f);
-    b->la_len = (int)((1.5f + b->amt[AH_ADV_LIMITER]) * 0.001f * (float)rate);
-    if (b->la_len < 8)
-        b->la_len = 8;
-    if (b->la_len >= AH_ADV_LA)
-        b->la_len = AH_ADV_LA - 1;
 
     /* Amount 0 -> EBU -23 LUFS, 1 -> streaming -14 LUFS. */
     b->loud_target = -23.f + b->amt[AH_ADV_LOUDNESS] * 9.f;
@@ -1530,28 +1511,10 @@ static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l
             right = m;
         }
         break;
-    case AH_ADV_LIMITER: {
-        e->la[0][e->la_i] = left;
-        e->la[1][e->la_i] = right;
-        float tp = fmaxf(truepeak4(e->la_prev[0], left), truepeak4(e->la_prev[1], right));
-        e->la_prev[0] = left;
-        e->la_prev[1] = right;
-        float need = (tp > b->la_ceil) ? (b->la_ceil / (tp + 1e-12f)) : 1.f;
-        float rel = tau_coeff(8.f, rate);
-        if (need < e->la_g) {
-            e->la_g = need;
-            e->hold_n = (float)b->la_len;
-        } else if (e->hold_n > 0.f) {
-            e->hold_n -= 1.f;
-        } else {
-            e->la_g += (1.f - e->la_g) * rel;
-        }
-        int rd = (e->la_i - b->la_len + AH_ADV_LA) % AH_ADV_LA;
-        left = e->la[0][rd] * e->la_g;
-        right = e->la[1][rd] * e->la_g;
-        e->la_i = (e->la_i + 1) % AH_ADV_LA;
+    case AH_ADV_LIMITER:
+        e->lim.ceil = b->la_ceil;
+        ah_limiter_tick(&e->lim, &left, &right);
         break;
-    }
     default:
         break;
     }
@@ -1603,8 +1566,9 @@ AhAdvancedEngine *ah_advanced_create(void)
     if (!e)
         return NULL;
     atomic_init(&e->idx, 0);
+    atomic_init(&e->busy, -1);
     e->rng = 0xC001D00Du;
-    e->la_g = 1.f;
+    ah_limiter_init(&e->lim, 48000, -0.3f, 2.f, 40.f, true);
     e->gm_g = 1.f;
     e->loud_g = 1.f;
     e->agc_g = 1.f;
@@ -1634,16 +1598,12 @@ void ah_advanced_reset(AhAdvancedEngine *eng)
     memset(eng->bs2b_lo, 0, sizeof(eng->bs2b_lo));
     memset(eng->bs2b_hi, 0, sizeof(eng->bs2b_hi));
     memset(eng->adaa, 0, sizeof(eng->adaa));
-    memset(eng->la, 0, sizeof(eng->la));
-    memset(eng->la_prev, 0, sizeof(eng->la_prev));
+    ah_limiter_init(&eng->lim, eng->rate ? eng->rate : 48000, -0.3f, 2.f, 40.f, true);
     memset(eng->comb_lp, 0, sizeof(eng->comb_lp));
     memset(eng->spec_e, 0, sizeof(eng->spec_e));
     eng->lofi_n = 0;
     eng->xpos = 0;
     eng->ir_pos = 0;
-    eng->la_i = 0;
-    eng->hold_n = 0.f;
-    eng->la_g = 1.f;
     eng->gm_g = 1.f;
     eng->loud_g = 1.f;
     eng->agc_g = 1.f;
@@ -1655,11 +1615,11 @@ void ah_advanced_apply(AhAdvancedEngine *eng, const AhAdvancedState *s, uint32_t
 {
     if (!eng || !s)
         return;
-    int wi = 1 - atomic_load_explicit(&eng->idx, memory_order_relaxed);
+    const int wi = ah_ui_slot(&eng->idx, &eng->busy);
     AhAdvancedState tmp = *s;
     ah_advanced_clamp(&tmp);
     design_bank(&eng->banks[wi], &tmp, rate ? rate : 48000);
-    atomic_store_explicit(&eng->idx, wi, memory_order_release);
+    atomic_store(&eng->idx, wi);
 }
 
 void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
@@ -1668,8 +1628,7 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
     if (!eng || !left || !right || n == 0)
         return;
 
-    const int ri = atomic_load_explicit(&eng->idx, memory_order_acquire);
-    const AhAdvBank *b = &eng->banks[ri];
+    const AhAdvBank *b = &eng->banks[ah_rt_acquire(&eng->idx, &eng->busy)];
 
     if (rate > 0 && rate != eng->rate) {
         eng->rate = rate;
@@ -1731,6 +1690,7 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
                 peak = p;
         }
     }
+    ah_rt_release(&eng->busy);
 
     memcpy(eng->spec_e, spec, sizeof(spec));
     if (peak > 0.99f)
