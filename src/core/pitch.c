@@ -24,18 +24,18 @@ void ah_pitch_reset(AhPitchState *s)
     s->ratio = 1.0;
 }
 
-static float lerp_at(const float *buf, double pos)
+/* 4-point Hermite: far less HF loss and aliasing than linear. */
+static float hermite_at(const float *buf, double pos)
 {
-    while (pos < 0.0)
-        pos += (double)AH_PITCH_BUF;
-    while (pos >= (double)AH_PITCH_BUF)
-        pos -= (double)AH_PITCH_BUF;
-    int i0 = (int)pos;
-    int i1 = i0 + 1;
-    if (i1 >= AH_PITCH_BUF)
-        i1 = 0;
-    float f = (float)(pos - (double)i0);
-    return buf[i0] + f * (buf[i1] - buf[i0]);
+    pos -= (double)AH_PITCH_BUF * floor(pos / (double)AH_PITCH_BUF);
+    const int m = AH_PITCH_BUF - 1;
+    const int i = (int)pos & m;
+    const float f = (float)(pos - floor(pos));
+    const float xm = buf[(i - 1) & m], x0 = buf[i], x1 = buf[(i + 1) & m], x2 = buf[(i + 2) & m];
+    const float c1 = 0.5f * (x1 - xm);
+    const float c2 = xm - 2.5f * x0 + 2.f * x1 - 0.5f * x2;
+    const float c3 = 0.5f * (x2 - xm) + 1.5f * (x0 - x1);
+    return ((c3 * f + c2) * f + c1) * f + x0;
 }
 
 void ah_pitch_process(AhPitchState *s, int semitones, float *left, float *right)
@@ -47,7 +47,14 @@ void ah_pitch_process(AhPitchState *s, int semitones, float *left, float *right)
     s->l[s->w] = *left;
     s->r[s->w] = *right;
 
-    if (semitones == 0) {
+    if (semitones != 0 && semitones != s->last) {
+        s->last = semitones;
+        s->ratio = pow(2.0, (double)semitones / 12.0);
+    }
+    /* ~20 ms fade between dry and shifted so toggling never clicks. */
+    s->mix += ((semitones ? 1.f : 0.f) - s->mix) * 0.001f;
+    if (semitones == 0 && s->mix < 1e-4f) {
+        s->mix = 0.f;
         s->last = 0;
         s->ratio = 1.0;
         s->rpos = (double)s->w;
@@ -55,27 +62,21 @@ void ah_pitch_process(AhPitchState *s, int semitones, float *left, float *right)
         return;
     }
 
-    if (semitones != s->last) {
-        s->last = semitones;
-        s->ratio = pow(2.0, (double)semitones / 12.0);
-    }
-
     const int hop = AH_PITCH_BUF / 2;
     double rd0 = s->rpos;
     double rd1 = rd0 + (double)hop;
 
     double dist = (double)s->w - rd0;
-    while (dist < 0.0)
-        dist += (double)AH_PITCH_BUF;
-    while (dist >= (double)AH_PITCH_BUF)
-        dist -= (double)AH_PITCH_BUF;
-    double t = dist / (double)hop;
-    t -= floor(t);
-    float w0 = 0.5f * (1.f + cosf((float)(M_PI * t)));
-    float w1 = 1.f - w0;
+    dist -= (double)AH_PITCH_BUF * floor(dist / (double)AH_PITCH_BUF);
+    /* Each tap fades to zero exactly where it wraps past the write head. */
+    const float sn = sinf((float)(M_PI * dist / AH_PITCH_BUF));
+    const float w0 = sn * sn;
+    const float w1 = 1.f - w0;
 
-    *left = lerp_at(s->l, rd0) * w0 + lerp_at(s->l, rd1) * w1;
-    *right = lerp_at(s->r, rd0) * w0 + lerp_at(s->r, rd1) * w1;
+    const float pl = hermite_at(s->l, rd0) * w0 + hermite_at(s->l, rd1) * w1;
+    const float pr = hermite_at(s->r, rd0) * w0 + hermite_at(s->r, rd1) * w1;
+    *left += s->mix * (pl - *left);
+    *right += s->mix * (pr - *right);
 
     s->rpos += s->ratio;
     while (s->rpos >= (double)AH_PITCH_BUF)

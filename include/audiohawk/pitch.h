@@ -19,6 +19,7 @@ typedef struct {
     int last;
     double rpos;
     double ratio;
+    float mix;
 } AhPitchState;
 
 int ah_pitch_clamp(int semitones);
