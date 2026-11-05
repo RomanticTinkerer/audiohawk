@@ -12,14 +12,17 @@
 #ifndef AUDIOHAWK_SOURCE_DIR
 #define AUDIOHAWK_SOURCE_DIR ""
 #endif
+#define AH_TABS 4
 
 typedef struct {
     AhCore *core;
     GtkApplication *app;
     GtkWindow *win;
     AdwWindowTitle *title;
+    AdwToastOverlay *toasts;
     GtkStack *stack;
-    GtkWidget *dock_btns[4];
+    GtkWidget *dock_btns[AH_TABS];
+    int tab;
     GtkWidget *eq_page;
     AhTray *tray;
     gboolean quitting;
@@ -90,23 +93,24 @@ static void load_css(void)
 
 static void set_active_tab(Shell *shell, int index)
 {
-    const char *names[] = { "home", "equalizer", "advanced", "settings" };
-    const char *titles[] = { "Home", "Equalizer", "Advanced", "Settings" };
-    const char *subs[] = {
+    const char *names[AH_TABS] = { "home", "equalizer", "advanced", "settings" };
+    const char *titles[AH_TABS] = { "Home", "Equalizer", "Advanced", "Settings" };
+    const char *subs[AH_TABS] = {
         "Listening profiles",
         "Graphic EQ & PipeWire",
         "Enhance, fun, process",
         "Preferences"
     };
 
-    if (index < 0 || index > 3)
+    if (index < 0 || index >= AH_TABS)
         return;
 
+    shell->tab = index;
     gtk_stack_set_visible_child_name(shell->stack, names[index]);
     adw_window_title_set_title(shell->title, titles[index]);
     adw_window_title_set_subtitle(shell->title, subs[index]);
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < AH_TABS; ++i) {
         if (i == index)
             gtk_widget_add_css_class(shell->dock_btns[i], "active");
         else
@@ -159,9 +163,26 @@ static GtkWidget *make_dock(Shell *shell)
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-eq", "Equalizer", 1, shell));
     gtk_box_append(GTK_BOX(dock), make_dock_button("bands", "Advanced", 2, shell));
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-settings", "Settings", 3, shell));
-
     gtk_box_append(GTK_BOX(wrap), dock);
     return wrap;
+}
+
+/* Pages read core state when built, so rebuilding is how they pick up a reset. */
+static void build_pages(Shell *shell)
+{
+    GtkWidget *child;
+    while ((child = gtk_widget_get_first_child(GTK_WIDGET(shell->stack))))
+        gtk_stack_remove(shell->stack, child);
+
+    GtkWidget *home = ah_gtk_dashboard_new(shell->core, shell->toasts);
+    shell->eq_page = ah_gtk_equalizer_page_new(shell->core, shell->toasts);
+    GtkWidget *advanced = ah_gtk_advanced_page_new(shell->core, shell->toasts);
+    GtkWidget *settings = ah_gtk_settings_page_new(shell->core, shell->toasts);
+
+    gtk_stack_add_named(shell->stack, home, "home");
+    gtk_stack_add_named(shell->stack, shell->eq_page, "equalizer");
+    gtk_stack_add_named(shell->stack, advanced, "advanced");
+    gtk_stack_add_named(shell->stack, settings, "settings");
 }
 
 static void show_window(Shell *shell)
@@ -194,6 +215,47 @@ static void tray_show(gpointer user_data)
 static void tray_quit(gpointer user_data)
 {
     quit_app(user_data);
+}
+
+static void on_reset_response(AdwAlertDialog *dialog, const char *response, gpointer user_data)
+{
+    Shell *shell = user_data;
+    (void)dialog;
+    if (strcmp(response, "reset") != 0)
+        return;
+    const gboolean saved = ah_core_reset(shell->core) == 0;
+    build_pages(shell);
+    set_active_tab(shell, shell->tab);
+    adw_toast_overlay_add_toast(shell->toasts,
+                                adw_toast_new(saved ? "Configs reset to defaults"
+                                                    : "Reset, but some configs could not be saved"));
+}
+
+static void confirm_reset(Shell *shell)
+{
+    show_window(shell);
+    AdwDialog *dialog = adw_alert_dialog_new(
+        "Reset all configs?",
+        "Profiles, equalizer curves, effects, Advanced settings, and per-app mappings "
+        "go back to their defaults. This can't be undone.");
+    AdwAlertDialog *alert = ADW_ALERT_DIALOG(dialog);
+    adw_alert_dialog_add_responses(alert, "cancel", "_Cancel", "reset", "_Reset", NULL);
+    adw_alert_dialog_set_response_appearance(alert, "reset", ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response(alert, "cancel");
+    adw_alert_dialog_set_close_response(alert, "cancel");
+    g_signal_connect(dialog, "response", G_CALLBACK(on_reset_response), shell);
+    adw_dialog_present(dialog, GTK_WIDGET(shell->win));
+}
+
+static void tray_reset(gpointer user_data)
+{
+    confirm_reset(user_data);
+}
+
+static void on_reset_clicked(GtkButton *btn, gpointer user_data)
+{
+    (void)btn;
+    confirm_reset(user_data);
 }
 
 static void on_show_action(GSimpleAction *action, GVariant *param, gpointer user_data)
@@ -298,9 +360,10 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     g_signal_connect(shell->win, "close-request", G_CALLBACK(on_close_request), shell);
 
     if (!shell->tray)
-        shell->tray = ah_tray_create(app, tray_show, tray_quit, shell);
+        shell->tray = ah_tray_create(app, tray_show, tray_quit, tray_reset, shell);
 
     AdwToastOverlay *toasts = ADW_TOAST_OVERLAY(adw_toast_overlay_new());
+    shell->toasts = toasts;
     AdwToolbarView *toolbar = ADW_TOOLBAR_VIEW(adw_toolbar_view_new());
 
     AdwHeaderBar *header = ADW_HEADER_BAR(adw_header_bar_new());
@@ -317,20 +380,16 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     adw_header_bar_pack_end(header, menu_btn);
     g_object_unref(menu);
 
+    GtkWidget *reset_btn = gtk_button_new_with_label("Reset Configs");
+    gtk_widget_set_tooltip_text(reset_btn, "Put every AudioHawk setting back to its default");
+    g_signal_connect(reset_btn, "clicked", G_CALLBACK(on_reset_clicked), shell);
+    adw_header_bar_pack_end(header, reset_btn);
+
     adw_toolbar_view_add_top_bar(toolbar, GTK_WIDGET(header));
 
     shell->stack = GTK_STACK(gtk_stack_new());
     gtk_stack_set_transition_type(shell->stack, GTK_STACK_TRANSITION_TYPE_CROSSFADE);
-
-    GtkWidget *home = ah_gtk_dashboard_new(shell->core, toasts);
-    shell->eq_page = ah_gtk_equalizer_page_new(shell->core, toasts);
-    GtkWidget *advanced = ah_gtk_advanced_page_new(shell->core, toasts);
-    GtkWidget *settings = ah_gtk_settings_page_new(shell->core, toasts);
-
-    gtk_stack_add_named(shell->stack, home, "home");
-    gtk_stack_add_named(shell->stack, shell->eq_page, "equalizer");
-    gtk_stack_add_named(shell->stack, advanced, "advanced");
-    gtk_stack_add_named(shell->stack, settings, "settings");
+    build_pages(shell);
 
     adw_toolbar_view_set_content(toolbar, GTK_WIDGET(shell->stack));
     adw_toolbar_view_add_bottom_bar(toolbar, make_dock(shell));

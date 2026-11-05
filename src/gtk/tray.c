@@ -20,6 +20,7 @@ struct AhTray {
     GtkApplication *app;
     AhTrayShowFn on_show;
     AhTrayQuitFn on_quit;
+    AhTrayResetFn on_reset;
     gpointer user_data;
     GDBusConnection *conn;
     guint own_id;
@@ -33,38 +34,24 @@ struct AhTray {
     gboolean registered_with_watcher;
 };
 
+static GVariant *menu_item(gint32 id, const char *label)
+{
+    GVariantBuilder props, kids;
+    g_variant_builder_init(&props, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&props, "{sv}", "label", g_variant_new_string(label));
+    g_variant_builder_add(&props, "{sv}", "enabled", g_variant_new_boolean(TRUE));
+    g_variant_builder_add(&props, "{sv}", "visible", g_variant_new_boolean(TRUE));
+    g_variant_builder_init(&kids, G_VARIANT_TYPE("av"));
+    return g_variant_new("(ia{sv}av)", id, &props, &kids);
+}
+
 static GVariant *build_menu_layout(void)
 {
-    GVariantBuilder show_props;
-    g_variant_builder_init(&show_props, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&show_props, "{sv}", "label",
-                          g_variant_new_string("_Show AudioHawk"));
-    g_variant_builder_add(&show_props, "{sv}", "enabled",
-                          g_variant_new_boolean(TRUE));
-    g_variant_builder_add(&show_props, "{sv}", "visible",
-                          g_variant_new_boolean(TRUE));
-
-    GVariantBuilder quit_props;
-    g_variant_builder_init(&quit_props, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&quit_props, "{sv}", "label",
-                          g_variant_new_string("_Quit AudioHawk"));
-    g_variant_builder_add(&quit_props, "{sv}", "enabled",
-                          g_variant_new_boolean(TRUE));
-    g_variant_builder_add(&quit_props, "{sv}", "visible",
-                          g_variant_new_boolean(TRUE));
-
-    GVariantBuilder empty_children;
-    g_variant_builder_init(&empty_children, G_VARIANT_TYPE("av"));
-
-    GVariant *show = g_variant_new("(ia{sv}av)", 1, &show_props, &empty_children);
-
-    g_variant_builder_init(&empty_children, G_VARIANT_TYPE("av"));
-    GVariant *quit = g_variant_new("(ia{sv}av)", 2, &quit_props, &empty_children);
-
     GVariantBuilder children;
     g_variant_builder_init(&children, G_VARIANT_TYPE("av"));
-    g_variant_builder_add(&children, "v", show);
-    g_variant_builder_add(&children, "v", quit);
+    g_variant_builder_add(&children, "v", menu_item(1, "_Show AudioHawk"));
+    g_variant_builder_add(&children, "v", menu_item(3, "_Reset Configs"));
+    g_variant_builder_add(&children, "v", menu_item(2, "_Quit AudioHawk"));
 
     GVariantBuilder root_props;
     g_variant_builder_init(&root_props, G_VARIANT_TYPE("a{sv}"));
@@ -110,6 +97,8 @@ static void menu_method(GDBusConnection *conn, const gchar *sender,
                 tray->on_show(tray->user_data);
             else if (id == 2 && tray->on_quit)
                 tray->on_quit(tray->user_data);
+            else if (id == 3 && tray->on_reset)
+                tray->on_reset(tray->user_data);
         }
         g_dbus_method_invocation_return_value(inv, NULL);
         return;
@@ -480,12 +469,14 @@ static void rm_rf(const char *path)
 AhTray *ah_tray_create(GtkApplication *app,
                        AhTrayShowFn on_show,
                        AhTrayQuitFn on_quit,
+                       AhTrayResetFn on_reset,
                        gpointer user_data)
 {
     AhTray *tray = g_new0(AhTray, 1);
     tray->app = app;
     tray->on_show = on_show;
     tray->on_quit = on_quit;
+    tray->on_reset = on_reset;
     tray->user_data = user_data;
     tray->icon_name = g_strdup("audiohawk");
     {

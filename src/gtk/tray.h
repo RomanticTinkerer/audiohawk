@@ -7,11 +7,13 @@ typedef struct AhTray AhTray;
 
 typedef void (*AhTrayShowFn)(gpointer user_data);
 typedef void (*AhTrayQuitFn)(gpointer user_data);
+typedef void (*AhTrayResetFn)(gpointer user_data);
 
 /* StatusNotifierItem tray (KDE + GNOME AppIndicator extension). */
 AhTray *ah_tray_create(GtkApplication *app,
                        AhTrayShowFn on_show,
                        AhTrayQuitFn on_quit,
+                       AhTrayResetFn on_reset,
                        gpointer user_data);
 void ah_tray_destroy(AhTray *tray);
 

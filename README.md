@@ -13,7 +13,7 @@ AudioHawk is written in **C** (core, GTK UI, and launcher) using GTK4 and libadw
 - **System pitch** — shift all AudioHawk-routed audio from -15 to +15 semitones
 - **Start on system startup** — XDG autostart (Settings); launches hidden with `--background`
 - **Suspend survival** — reconnects to PipeWire after sleep and re-arms EQ automatically
-
+- **Reset Configs** button in the header (and the tray menu) puts every setting back to its default
 ## Dependencies
 
 **Required**
