@@ -94,16 +94,17 @@ void ah_eq_fill_freqs(AhBandCount count, AhEqBand out[AH_EQ_BANDS_MAX])
 {
     const float *freqs = k_freq_10;
     int n = 10;
-    float q = 1.1f;
+    /* Bandwidth = 2x band spacing; the EQ designer compensates the overlap. */
+    float q = 0.667f;
 
     if (count == AH_BANDS_15) {
         freqs = k_freq_15;
         n = 15;
-        q = 1.4f;
+        q = 1.04f;
     } else if (count == AH_BANDS_20) {
         freqs = k_freq_20;
         n = 20;
-        q = 1.7f;
+        q = 1.41f;
     }
 
     memset(out, 0, sizeof(AhEqBand) * AH_EQ_BANDS_MAX);
