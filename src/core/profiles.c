@@ -51,7 +51,7 @@ static const AhProfileDef g_profiles[AH_PROFILE_COUNT] = {
     {
         .id = AH_PROFILE_WORK,
         .name = "Work",
-        .blurb = "Meetings & podcasts — cut boom, boost speech presence.",
+        .blurb = "Meetings and podcasts — cut boom, boost speech presence.",
         .bands = {
             {32, 1.1f, -4.0f}, {64, 1.1f, -2.0f}, {125, 1.1f, 0.0f},
             {250, 1.1f, -1.0f}, {500, 1.1f, -1.0f}, {1000, 1.1f, 1.0f},
