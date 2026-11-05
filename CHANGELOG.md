@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2 - 2026-11-05
+
+### Fixed
+- Flat EQ is really flat now: the hidden body/air filters and the fixed +3.6 dB makeup gain are gone, so audio passes through bit-exact
+- The graphic EQ hits the curve it draws (+6 dB on every band used to come out as +10 dB)
+- Pitch shifting no longer clicks, and turning it on or off fades instead of cutting
+- Dragging sliders can no longer swap filters halfway through an audio block
+- The Advanced limiter's true-peak check works and its gain moves smoothly
+
+### Changed
+- An automatic preamp keeps EQ and enhancer boosts from clipping, and a lookahead limiter replaces the soft clipper
+- Output is quieter than 0.3.1 because boosts no longer clip; raise the system volume or Volume Boost to match
+- Bass, mid, treble, and dialogue enhancers use honest levels; dialogue lifts only the center and bass gets a rumble filter
+- The volume leveler rides loudness over seconds instead of pumping
+- The Game profile favors footsteps and positional cues instead of heavy bass
+
 ## 0.3.1 - 2026-10-30
 
 ### Changed
