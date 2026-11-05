@@ -100,6 +100,7 @@ if(AUDIOHAWK_BUILD_GTK)
         # Dev + install data roots so icons/CSS resolve even when CWD ≠ repo.
         target_compile_definitions(audiohawk-gtk PRIVATE
             "AUDIOHAWK_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\""
+            "AUDIOHAWK_VERSION=\"${PROJECT_VERSION}\""
         )
         # Convenience for running from the build/ directory.
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/data")

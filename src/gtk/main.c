@@ -12,7 +12,11 @@
 #ifndef AUDIOHAWK_SOURCE_DIR
 #define AUDIOHAWK_SOURCE_DIR ""
 #endif
-#define AH_TABS 4
+#ifndef AUDIOHAWK_VERSION
+#define AUDIOHAWK_VERSION ""
+#endif
+
+#define AH_TABS 5
 
 typedef struct {
     AhCore *core;
@@ -93,13 +97,14 @@ static void load_css(void)
 
 static void set_active_tab(Shell *shell, int index)
 {
-    const char *names[AH_TABS] = { "home", "equalizer", "advanced", "settings" };
-    const char *titles[AH_TABS] = { "Home", "Equalizer", "Advanced", "Settings" };
+    const char *names[AH_TABS] = { "home", "equalizer", "advanced", "settings", "about" };
+    const char *titles[AH_TABS] = { "Home", "Equalizer", "Advanced", "Settings", "About" };
     const char *subs[AH_TABS] = {
         "Listening profiles",
         "Graphic EQ & PipeWire",
         "Enhance, fun, process",
-        "Preferences"
+        "Preferences",
+        "People and credits"
     };
 
     if (index < 0 || index >= AH_TABS)
@@ -163,8 +168,91 @@ static GtkWidget *make_dock(Shell *shell)
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-eq", "Equalizer", 1, shell));
     gtk_box_append(GTK_BOX(dock), make_dock_button("bands", "Advanced", 2, shell));
     gtk_box_append(GTK_BOX(dock), make_dock_button("nav-settings", "Settings", 3, shell));
+    gtk_box_append(GTK_BOX(dock), make_dock_button("nav-about", "About", 4, shell));
+
     gtk_box_append(GTK_BOX(wrap), dock);
     return wrap;
+}
+
+typedef struct {
+    const char *title, *subtitle, *url;
+} AhLink;
+
+static const AhLink k_project[] = {
+    { "Source code", "github.com/RomanticTinkerer/audiohawk",
+      "https://github.com/RomanticTinkerer/audiohawk" },
+};
+
+static const AhLink k_developers[] = {
+    { "Animesh Singh", "Creator and maintainer · @RomanticTinkerer",
+      "https://github.com/RomanticTinkerer" },
+};
+
+/* ponytail: snapshot of GitHub contributors, fetch the API if the list grows. */
+static const AhLink k_contributors[] = {
+    { "Animesh Singh", "@RomanticTinkerer", "https://github.com/RomanticTinkerer" },
+    { "Arjun Vijay Prakash", "@ArjunCodess", "https://github.com/ArjunCodess" },
+    { "Everyone on GitHub", "Full contributor graph",
+      "https://github.com/RomanticTinkerer/audiohawk/graphs/contributors" },
+};
+
+static const AhLink k_credits[] = {
+    { "EasyEffects", "Virtual sink routing and compressor defaults",
+      "https://github.com/wwmm/easyeffects" },
+    { "PipeWire", "Audio graph and filter API",
+      "https://gitlab.freedesktop.org/pipewire/pipewire" },
+    { "libbs2b", "Bauer crossfeed filters", "https://bs2b.sourceforge.net/" },
+    { "libebur128", "K-weighting for loudness", "https://github.com/jiixyj/libebur128" },
+    { "LSP Plugins", "Limiter and soft-knee ideas", "https://github.com/lsp-plugins/lsp-plugins" },
+    { "Audio EQ Cookbook", "Robert Bristow-Johnson's biquad formulas",
+      "https://www.w3.org/TR/audio-eq-cookbook/" },
+    { "Accurate Cascade Graphic Equalizer", "Välimäki and Liski, 2017 · EQ band compensation",
+      "https://doi.org/10.1109/LSP.2016.2645280" },
+    { "GTK", "UI toolkit", "https://gitlab.gnome.org/GNOME/gtk" },
+    { "libadwaita", "GNOME widgets and styling", "https://gitlab.gnome.org/GNOME/libadwaita" },
+    { "Lucide", "Icons (ISC license)", "https://github.com/lucide-icons/lucide" },
+};
+
+static void on_link_activated(AdwActionRow *row, gpointer url)
+{
+    GtkUriLauncher *launcher = gtk_uri_launcher_new(url);
+    gtk_uri_launcher_launch(launcher, GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(row))),
+                            NULL, NULL, NULL);
+    g_object_unref(launcher);
+}
+
+static void add_links(AdwPreferencesPage *page, const char *title, const char *desc,
+                      const AhLink *links, size_t n)
+{
+    AdwPreferencesGroup *group = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+    adw_preferences_group_set_title(group, title);
+    if (desc)
+        adw_preferences_group_set_description(group, desc);
+    for (size_t i = 0; i < n; ++i) {
+        GtkWidget *row = adw_action_row_new();
+        adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), links[i].title);
+        adw_action_row_set_subtitle(ADW_ACTION_ROW(row), links[i].subtitle);
+        adw_action_row_add_suffix(ADW_ACTION_ROW(row),
+                                  gtk_image_new_from_icon_name("adw-external-link-symbolic"));
+        gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), TRUE);
+        g_signal_connect(row, "activated", G_CALLBACK(on_link_activated), (gpointer)links[i].url);
+        adw_preferences_group_add(group, row);
+    }
+    adw_preferences_page_add(page, group);
+}
+
+static GtkWidget *make_about_page(void)
+{
+    AdwPreferencesPage *page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
+    add_links(page, "AudioHawk " AUDIOHAWK_VERSION,
+              "PipeWire equalizer and listening-profile controller for GNU/Linux.",
+              k_project, G_N_ELEMENTS(k_project));
+    add_links(page, "Developers", NULL, k_developers, G_N_ELEMENTS(k_developers));
+    add_links(page, "Contributors", "Everyone who has committed to AudioHawk on GitHub.",
+              k_contributors, G_N_ELEMENTS(k_contributors));
+    add_links(page, "Credits", "Projects and papers whose work AudioHawk builds on.",
+              k_credits, G_N_ELEMENTS(k_credits));
+    return GTK_WIDGET(page);
 }
 
 /* Pages read core state when built, so rebuilding is how they pick up a reset. */
@@ -183,6 +271,7 @@ static void build_pages(Shell *shell)
     gtk_stack_add_named(shell->stack, shell->eq_page, "equalizer");
     gtk_stack_add_named(shell->stack, advanced, "advanced");
     gtk_stack_add_named(shell->stack, settings, "settings");
+    gtk_stack_add_named(shell->stack, make_about_page(), "about");
 }
 
 static void show_window(Shell *shell)

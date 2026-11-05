@@ -14,6 +14,7 @@ AudioHawk is written in **C** (core, GTK UI, and launcher) using GTK4 and libadw
 - **Start on system startup** — XDG autostart (Settings); launches hidden with `--background`
 - **Suspend survival** — reconnects to PipeWire after sleep and re-arms EQ automatically
 - **Reset Configs** button in the header (and the tray menu) puts every setting back to its default
+- **About** tab lists the developers, GitHub contributors, and the projects AudioHawk builds on
 ## Dependencies
 
 **Required**
