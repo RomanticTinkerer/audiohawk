@@ -9,11 +9,13 @@ option(AUDIOHAWK_DSP_TESTS_ONLY "Build portable DSP tests without PipeWire or UI
 if(BUILD_TESTING)
     add_executable(audiohawk_spatial_test
         tests/spatial_test.c
+        src/core/dsp.c
         src/core/spatial.c
         src/core/effects.c
         src/core/pitch.c)
     add_executable(audiohawk_advanced_test
         tests/advanced_test.c
+        src/core/dsp.c
         src/core/advanced.c
         src/core/spatial.c)
     target_include_directories(audiohawk_spatial_test PRIVATE include)
@@ -40,6 +42,7 @@ find_package(Threads REQUIRED)
 option(AUDIOHAWK_BUILD_GTK "Build GTK4/libadwaita UI" ON)
 
 add_library(audiohawk_core STATIC
+    src/core/dsp.c
     src/core/profiles.c
     src/core/config.c
     src/core/app_profiles.c
