@@ -137,6 +137,27 @@ int ah_core_persist(AhCore *core)
     return (a == 0 && b == 0 && c == 0 && d == 0 && e == 0) ? 0 : -1;
 }
 
+int ah_core_reset(AhCore *core)
+{
+    if (!core)
+        return -1;
+    const AhSettings keep = core->settings;
+    ah_settings_defaults(&core->settings);
+    core->settings.eq_enabled = keep.eq_enabled;
+    core->settings.start_on_startup = keep.start_on_startup;
+    ah_app_profiles_init(&core->app_profiles);
+    ah_eq_state_defaults(&core->equalizer);
+    ah_effects_defaults(&core->effects);
+    ah_advanced_defaults(&core->advanced);
+
+    if (core->equalizer.follow_profile)
+        (void)ah_core_apply_listening(core);
+    else
+        (void)ah_core_refresh_eq(core);
+    (void)ah_core_sync_pipeline(core);
+    return ah_core_persist(core);
+}
+
 int ah_core_set_eq_enabled(AhCore *core, bool enabled)
 {
     if (!core || !core->eq)

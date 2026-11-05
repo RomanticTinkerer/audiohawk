@@ -49,6 +49,9 @@ int ah_core_refresh_eq(AhCore *core);
 int ah_core_sync_pipeline(AhCore *core);
 int ah_core_persist(AhCore *core);
 
+/* All configs back to defaults and saved; EQ power and autostart stay as they are. */
+int ah_core_reset(AhCore *core);
+
 #ifdef __cplusplus
 }
 #endif
