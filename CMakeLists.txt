@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(AudioHawk VERSION 0.3.2 LANGUAGES C)
+# CMake versions are numbers only, so letter releases like 0.3.2b live here.
+set(AUDIOHAWK_RELEASE 0.3.2b)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -100,7 +102,7 @@ if(AUDIOHAWK_BUILD_GTK)
         # Dev + install data roots so icons/CSS resolve even when CWD ≠ repo.
         target_compile_definitions(audiohawk-gtk PRIVATE
             "AUDIOHAWK_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\""
-            "AUDIOHAWK_VERSION=\"${PROJECT_VERSION}\""
+            "AUDIOHAWK_VERSION=\"${AUDIOHAWK_RELEASE}\""
         )
         # Convenience for running from the build/ directory.
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/data")

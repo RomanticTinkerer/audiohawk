@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2b - 2026-11-05
+
+### Added
+- About tab in the dock with the developers, GitHub contributors, and credits for the projects and papers AudioHawk builds on
+- Reset Configs button in the top-right corner of every tab, plus a Reset Configs item in the tray menu. It asks first, then puts profiles, EQ curves, effects, Advanced settings, and per-app mappings back to their defaults. EQ power and start-on-login stay as they are
+
+### Fixed
+- The Work profile description shows up again (a stray `&` was breaking the label)
+
 ## 0.3.2 - 2026-11-05
 
 ### Fixed
