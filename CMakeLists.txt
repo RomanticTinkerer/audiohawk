@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(AudioHawk VERSION 0.3.2 LANGUAGES C)
+project(AudioHawk VERSION 0.3.3 LANGUAGES C)
 # CMake versions are numbers only, so letter releases like 0.3.2b live here.
-set(AUDIOHAWK_RELEASE 0.3.2b)
+set(AUDIOHAWK_RELEASE 0.3.3)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)

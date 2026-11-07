@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.3 - 2026-11-07
+
+### Fixed
+- EQ and effects kick in right away at login. If PipeWire was still starting, AudioHawk used to flip the EQ switch off while audio still ran through it, so nothing matched until you poked a few buttons
+- Switching outputs (headphones, Bluetooth, HDMI) while the EQ is on now moves the sound to the new device instead of leaving it on the old one
+- Room and Hall reverb no longer bleed into each other or smear the left and right channels
+- The stereo correlation meter reads 1.0 for mono audio (it used to top out at 0.5)
+- The Advanced spectrum shows real per-band levels
+- Gain match ramps smoothly instead of stepping once per audio block
+
+### Changed
+- Advanced tab: the mouse wheel scrolls the page instead of nudging sliders, tab titles show how many effects are on, touching a control switches the preset to Custom, and meters read in dB
+
 ## 0.3.2b - 2026-11-05
 
 ### Added
