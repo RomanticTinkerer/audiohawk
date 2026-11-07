@@ -28,6 +28,13 @@ need_root() {
     fi
 }
 
+# Installed .deb version, empty when missing or only config files are left.
+deb_version() {
+    case "$(dpkg-query -W -f='${db:Status-Status} ${Version}' audiohawk 2>/dev/null)" in
+    "installed "*) dpkg-query -W -f='${Version}' audiohawk ;;
+    esac
+}
+
 fetch() {
     echo "Downloading $1"
     curl -fsSL --retry 3 -o "$2" "$1" || die "download failed"
@@ -71,11 +78,16 @@ if [ -z "$stage" ]; then
 
     if command -v apt-get >/dev/null 2>&1; then
         need_root
+        have=$(deb_version)
+        if [ -n "$have" ] && dpkg --compare-versions "$have" ge "$ver"; then
+            echo "AudioHawk $have is already up to date"
+            exit 0
+        fi
         fetch "$base/audiohawk_${ver}_amd64.deb" "$tmp/audiohawk.deb"
         # A broken apt hook elsewhere on the system fails the run after the
         # package is in, so trust the installed version over apt's exit code.
         if ! DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp/audiohawk.deb"; then
-            [ "$(dpkg-query -W -f='${Version}' audiohawk 2>/dev/null)" = "$ver" ] ||
+            [ "$(deb_version)" = "$ver" ] ||
                 die "apt-get could not install the package"
             echo "apt-get reported an error, but AudioHawk $ver is installed"
         fi
