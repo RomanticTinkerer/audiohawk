@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5b - 2026-11-07
+
+### Changed
+- Updates install on their own now, with no password. The `.deb` and `.rpm` ship a small update helper plus a polkit rule that lets the person at the desktop run just that helper. AudioHawk restarts the way it was running, so a login update stays hidden in the tray
+- Updates install the package with the helper that's already on your system instead of running a script downloaded from the internet as root
+- `install.sh` skips the download when you already have the latest version
+
+### Fixed
+- A broken apt hook somewhere else on the system no longer makes an update look failed when the package installed fine
+
 ## 0.3.5 - 2026-11-07
 
 ### Added
