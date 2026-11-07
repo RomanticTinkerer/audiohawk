@@ -4,12 +4,16 @@
 #include "audiohawk/advanced.h"
 #include "audiohawk/pipewire_eq.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+static const char *const k_tab_titles[3] = { "Enhancement", "Fun", "Processing" };
 
 typedef struct {
     AhCore *core;
     GtkWidget *root;
+    GtkStackPage *tabs[3];
     GtkWidget *spec;
     GtkWidget *clip_lab;
     GtkWidget *cpu_lab;
@@ -44,14 +48,35 @@ static char *format_percent(GtkScale *scale, double value, gpointer user_data)
     return g_strdup_printf("%.0f%%", value);
 }
 
+/* Wheel over a slider scrolls the page instead, so skimming 39 rows can't change amounts. */
+static gboolean on_scale_scroll(GtkEventControllerScroll *ctl, double dx, double dy,
+                                gpointer user_data)
+{
+    (void)dx;
+    (void)user_data;
+    GtkWidget *sw = gtk_widget_get_ancestor(
+        gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(ctl)), GTK_TYPE_SCROLLED_WINDOW);
+    if (!sw)
+        return FALSE;
+    GtkAdjustment *adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(sw));
+    double step = 1.0;
+    if (gtk_event_controller_scroll_get_unit(ctl) == GDK_SCROLL_UNIT_WHEEL)
+        step = pow(gtk_adjustment_get_page_size(adj), 2.0 / 3.0);
+    gtk_adjustment_set_value(adj, gtk_adjustment_get_value(adj) + dy * step);
+    return TRUE;
+}
+
 static GtkWidget *make_percent_scale(int value)
 {
     GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 100, 5);
+    GtkEventController *scroll = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+    gtk_event_controller_set_propagation_phase(scroll, GTK_PHASE_CAPTURE);
+    g_signal_connect(scroll, "scroll", G_CALLBACK(on_scale_scroll), NULL);
+    gtk_widget_add_controller(scale, scroll);
     gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
     gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
     gtk_scale_set_digits(GTK_SCALE(scale), 0);
-    gtk_widget_set_size_request(scale, 140, -1);
-    gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_size_request(scale, 170, -1);
     gtk_widget_set_valign(scale, GTK_ALIGN_CENTER);
     gtk_scale_set_format_value_func(GTK_SCALE(scale), format_percent, NULL, NULL);
     set_scale(scale, value);
@@ -60,9 +85,31 @@ static GtkWidget *make_percent_scale(int value)
 
 static void refresh_sensitivity(AdvPage *p)
 {
-    for (int i = 0; i < AH_ADV_SLOTS; ++i)
-        gtk_widget_set_sensitive(p->scale[i], adw_switch_row_get_active(p->sw[i]));
+    int active[3] = { 0, 0, 0 };
+    for (int i = 0; i < AH_ADV_SLOTS; ++i) {
+        const gboolean on = adw_switch_row_get_active(p->sw[i]);
+        gtk_widget_set_sensitive(p->scale[i], on);
+        if (on)
+            active[ah_advanced_slot_tab(i)]++;
+    }
     gtk_widget_set_sensitive(GTK_WIDGET(p->app), adw_switch_row_get_active(p->per_app));
+
+    for (int t = 0; t < 3; ++t) {
+        char title[32];
+        if (active[t])
+            snprintf(title, sizeof(title), "%s (%d)", k_tab_titles[t], active[t]);
+        else
+            snprintf(title, sizeof(title), "%s", k_tab_titles[t]);
+        gtk_stack_page_set_title(p->tabs[t], title);
+    }
+}
+
+/* Hand-tuning an effect means the chain no longer matches the chosen preset. */
+static void mark_custom(AdvPage *p)
+{
+    p->suppress = TRUE;
+    adw_combo_row_set_selected(p->preset, 0);
+    p->suppress = FALSE;
 }
 
 static void push_state(AdvPage *p)
@@ -120,10 +167,11 @@ static void fill_from_core(AdvPage *p)
 static void on_switch(GObject *obj, GParamSpec *pspec, gpointer user_data)
 {
     AdvPage *p = user_data;
-    (void)obj;
     (void)pspec;
     if (p->suppress)
         return;
+    if (obj != G_OBJECT(p->ab) && obj != G_OBJECT(p->gain_match) && obj != G_OBJECT(p->per_app))
+        mark_custom(p);
     refresh_sensitivity(p);
     push_state(p);
 }
@@ -171,6 +219,7 @@ static void on_scale(GtkRange *range, gpointer user_data)
         set_scale(GTK_WIDGET(range), snapped);
         p->suppress = FALSE;
     }
+    mark_custom(p);
     push_state(p);
 }
 
@@ -203,10 +252,18 @@ static void draw_spec(GtkDrawingArea *area, cairo_t *cr, int w, int h, gpointer 
     }
 }
 
+static void format_db(char *buf, size_t n, float rms)
+{
+    if (rms < 0.0005f)
+        snprintf(buf, n, "silent");
+    else
+        snprintf(buf, n, "%.1f dB", 20.0 * log10(rms));
+}
+
 static gboolean tick_meters(gpointer user_data)
 {
     AdvPage *p = user_data;
-    if (!p || !p->core)
+    if (!p || !p->core || !gtk_widget_get_mapped(p->spec))
         return G_SOURCE_CONTINUE;
 
     AhAdvancedMeters m;
@@ -225,7 +282,10 @@ static gboolean tick_meters(gpointer user_data)
     gtk_label_set_text(GTK_LABEL(p->cpu_lab), buf);
     snprintf(buf, sizeof(buf), "%+0.2f", m.corr);
     gtk_label_set_text(GTK_LABEL(p->corr_lab), buf);
-    snprintf(buf, sizeof(buf), "%.3f / %.3f", m.dry_rms, m.wet_rms);
+    char dry[16], wet[16];
+    format_db(dry, sizeof(dry), m.dry_rms);
+    format_db(wet, sizeof(wet), m.wet_rms);
+    snprintf(buf, sizeof(buf), "%s / %s", dry, wet);
     gtk_label_set_text(GTK_LABEL(p->gain_lab), buf);
 
     if (p->spec)
@@ -321,15 +381,15 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
         "Equalizer", "Dynamics", "Cleanup", "Space", NULL
     };
 
-    gtk_stack_add_titled(GTK_STACK(stack),
-                         GTK_WIDGET(make_slot_page(p, 0, "Enhancement", enhance_groups)),
-                         "enhance", "Enhancement");
-    gtk_stack_add_titled(GTK_STACK(stack),
-                         GTK_WIDGET(make_slot_page(p, 1, "Fun", fun_groups)),
-                         "fun", "Fun");
-    gtk_stack_add_titled(GTK_STACK(stack),
-                         GTK_WIDGET(make_slot_page(p, 2, "Processing", process_groups)),
-                         "process", "Processing");
+    p->tabs[0] = gtk_stack_add_titled(
+        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 0, k_tab_titles[0], enhance_groups)),
+        "enhance", k_tab_titles[0]);
+    p->tabs[1] = gtk_stack_add_titled(
+        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 1, k_tab_titles[1], fun_groups)),
+        "fun", k_tab_titles[1]);
+    p->tabs[2] = gtk_stack_add_titled(
+        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 2, k_tab_titles[2], process_groups)),
+        "process", k_tab_titles[2]);
 
     AdwPreferencesPage *mon = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
     adw_preferences_page_set_title(mon, "Monitor");
@@ -376,7 +436,7 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
 
     AdwActionRow *gain_row = ADW_ACTION_ROW(adw_action_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(gain_row), "Dry / Wet Level");
-    p->gain_lab = gtk_label_new("0 / 0");
+    p->gain_lab = gtk_label_new("silent / silent");
     adw_action_row_add_suffix(gain_row, p->gain_lab);
     adw_preferences_group_add(meters, GTK_WIDGET(gain_row));
     adw_preferences_page_add(mon, meters);
