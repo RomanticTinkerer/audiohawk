@@ -30,7 +30,7 @@ need_root() {
 
 fetch() {
     echo "Downloading $1"
-    curl -fL --retry 3 -o "$2" "$1" || die "download failed"
+    curl -fsSL --retry 3 -o "$2" "$1" || die "download failed"
 }
 
 stage=""
@@ -72,7 +72,13 @@ if [ -z "$stage" ]; then
     if command -v apt-get >/dev/null 2>&1; then
         need_root
         fetch "$base/audiohawk_${ver}_amd64.deb" "$tmp/audiohawk.deb"
-        apt-get install -y "$tmp/audiohawk.deb"
+        # A broken apt hook elsewhere on the system fails the run after the
+        # package is in, so trust the installed version over apt's exit code.
+        if ! DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp/audiohawk.deb"; then
+            [ "$(dpkg-query -W -f='${Version}' audiohawk 2>/dev/null)" = "$ver" ] ||
+                die "apt-get could not install the package"
+            echo "apt-get reported an error, but AudioHawk $ver is installed"
+        fi
         echo "Installed AudioHawk $ver (.deb). Run: audiohawk"
         exit 0
     fi
