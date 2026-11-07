@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- The helper takes no arguments (pkexec also clears the environment) and only
+     installs the latest official release from GitHub, so the person at the
+     desktop can run it without a password, like a distro updater. -->
+<policyconfig>
+  <vendor>AudioHawk</vendor>
+  <vendor_url>https://github.com/RomanticTinkerer/audiohawk</vendor_url>
+  <action id="dev.audiohawk.update">
+    <description>Update AudioHawk</description>
+    <message>Authentication is required to update AudioHawk</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/audiohawk/audiohawk-update</annotate>
+  </action>
+</policyconfig>

@@ -12,6 +12,8 @@
 /* install.sh picks the .deb, .rpm, AppImage, or tarball for this system. */
 #define AH_INSTALL_CMD \
     "curl -fsSL https://github.com/" AH_REPO "/releases/latest/download/install.sh | sh"
+/* Shipped by the .deb/.rpm with a polkit rule that skips the password prompt. */
+#define AH_HELPER "/usr/lib/audiohawk/audiohawk-update"
 #define AH_RETRY_SECONDS 60
 
 typedef struct {
@@ -24,6 +26,24 @@ typedef struct {
 } Updater;
 
 static void check(Updater *u);
+static void install(Updater *u);
+
+static gboolean has_helper(void)
+{
+    return g_file_test(AH_HELPER, G_FILE_TEST_IS_EXECUTABLE);
+}
+
+/* Started hidden at login: the button isn't on screen, so say it out loud. */
+static void notify_if_hidden(Updater *u, const char *body)
+{
+    if (gtk_widget_get_mapped(GTK_WIDGET(u->btn)))
+        return;
+    GNotification *n = g_notification_new("AudioHawk update available");
+    g_notification_set_body(n, body);
+    g_notification_set_default_action(n, "app.show");
+    g_application_send_notification(u->app, "update", n);
+    g_object_unref(n);
+}
 
 static void set_status(Updater *u, const char *text, const char *tip, gboolean highlight)
 {
@@ -98,18 +118,18 @@ static void on_checked(GObject *src, GAsyncResult *res, gpointer data)
 
     g_free(u->latest);
     u->latest = tag;
-    show_update(u, "Download and install the new version from GitHub");
 
-    /* Started hidden at login: the button isn't on screen, so say it out loud. */
-    if (!gtk_widget_get_mapped(GTK_WIDGET(u->btn))) {
-        char *body = g_strdup_printf("Version %s is out. Open AudioHawk to update.", u->latest);
-        GNotification *n = g_notification_new("AudioHawk update available");
-        g_notification_set_body(n, body);
-        g_notification_set_default_action(n, "app.show");
-        g_application_send_notification(u->app, "update", n);
-        g_object_unref(n);
-        g_free(body);
+    /* No password needed: just do it. AUDIOHAWK_UPDATED stops a restart loop if
+     * the install ever leaves the old version in place. */
+    if ((g_getenv("APPIMAGE") || has_helper()) && !g_getenv("AUDIOHAWK_UPDATED")) {
+        install(u);
+        return;
     }
+
+    show_update(u, "Download and install the new version from GitHub");
+    char *body = g_strdup_printf("Version %s is out. Open AudioHawk to update.", u->latest);
+    notify_if_hidden(u, body);
+    g_free(body);
 }
 
 static void check(Updater *u)
@@ -144,14 +164,21 @@ static void on_installed(GObject *src, GAsyncResult *res, gpointer data)
         show_update(u, code == 126 || code == 127 ? "Update cancelled. Click to try again."
                                                   : "Update failed. Click to try again.");
         g_free(err);
+        char *body = g_strdup_printf("Couldn't install version %s. Open AudioHawk to retry.",
+                                     u->latest);
+        notify_if_hidden(u, body);
+        g_free(body);
         return;
     }
     g_free(err);
 
     set_status(u, "Restarting…", NULL, FALSE);
     const char *self = g_getenv("APPIMAGE");
-    /* ponytail: fixed 2 s wait for this process to exit; wait on its pid if relaunch races. */
-    char *argv[] = { "sh", "-c", "sleep 2; exec \"$0\"", (char *)(self ? self : "audiohawk"), NULL };
+    const gboolean hidden = !gtk_widget_get_mapped(GTK_WIDGET(u->btn));
+    /* Come back the way we were: hidden at login stays hidden.
+     * ponytail: fixed 2 s wait for this process to exit; wait on its pid if relaunch races. */
+    char *argv[] = { "sh", "-c", "sleep 2; AUDIOHAWK_UPDATED=1 exec \"$0\" \"$@\"",
+                     (char *)(self ? self : "audiohawk"), hidden ? "--background" : NULL, NULL };
     g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
     u->quit(u->quit_data);
 }
@@ -162,9 +189,13 @@ static void install(Updater *u)
     set_status(u, "Updating…", "Downloading and installing from GitHub", FALSE);
     const GSubprocessFlags flags = G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_PIPE;
     /* An AppImage replaces its own file; package installs need root. */
-    GSubprocess *p = g_getenv("APPIMAGE")
-        ? g_subprocess_new(flags, NULL, "/bin/sh", "-c", AH_INSTALL_CMD, NULL)
-        : g_subprocess_new(flags, NULL, "pkexec", "/bin/sh", "-c", AH_INSTALL_CMD, NULL);
+    GSubprocess *p;
+    if (g_getenv("APPIMAGE"))
+        p = g_subprocess_new(flags, NULL, "/bin/sh", "-c", AH_INSTALL_CMD, NULL);
+    else if (has_helper())
+        p = g_subprocess_new(flags, NULL, "pkexec", AH_HELPER, NULL);
+    else
+        p = g_subprocess_new(flags, NULL, "pkexec", "/bin/sh", "-c", AH_INSTALL_CMD, NULL);
     if (!p) {
         u->busy = FALSE;
         show_update(u, "pkexec is missing. Run the install command from the README instead.");

@@ -4,8 +4,8 @@
 #include <gtk/gtk.h>
 
 /* Header-bar button that shows the update status. It checks GitHub once when
- * created and installs the newest release on click, then calls quit so the
- * relaunched copy takes over. */
+ * created and installs the newest release (on its own when no password is
+ * needed, otherwise on click), then calls quit so the relaunched copy takes over. */
 GtkWidget *ah_updater_new(GApplication *app, void (*quit)(gpointer), gpointer quit_data);
 
 #endif

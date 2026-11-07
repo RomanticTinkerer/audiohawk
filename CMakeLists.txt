@@ -147,5 +147,8 @@ if(HAVE_GTK_UI)
     install(DIRECTORY data/appicon/tray/
             DESTINATION ${CMAKE_INSTALL_DATADIR}/audiohawk/tray
             FILES_MATCHING PATTERN "*.png")
+    # The polkit policy names this exact path, so it stays lib/, not LIBDIR.
+    install(PROGRAMS scripts/install.sh DESTINATION lib/audiohawk RENAME audiohawk-update)
+    install(FILES data/dev.audiohawk.update.policy DESTINATION ${CMAKE_INSTALL_DATADIR}/polkit-1/actions)
 endif()
 message(STATUS "AudioHawk UI: GTK=${HAVE_GTK_UI}")

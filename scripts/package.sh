@@ -84,7 +84,7 @@ Description: A simple audio enhancer.
 EOF
 find "$DEB_STAGE" -type d -exec chmod 0755 {} \;
 find "$DEB_STAGE/usr" -type f -exec chmod 0644 {} \;
-chmod 0755 "$DEB_STAGE/usr/bin/"*
+chmod 0755 "$DEB_STAGE/usr/bin/"* "$DEB_STAGE/usr/lib/audiohawk/audiohawk-update"
 DEB="$OUT/audiohawk_${VERSION}_${DEB_ARCH}.deb"
 dpkg-deb --root-owner-group --build "$DEB_STAGE" "$DEB"
 echo "Built $DEB"

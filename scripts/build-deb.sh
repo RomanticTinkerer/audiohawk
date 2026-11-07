@@ -68,7 +68,7 @@ chmod 0755 "$STAGE/DEBIAN/postrm"
 # Fix permissions for packaging
 find "$STAGE" -type d -exec chmod 0755 {} \;
 find "$STAGE/usr" -type f -exec chmod 0644 {} \;
-chmod 0755 "$STAGE/usr/bin/"* || true
+chmod 0755 "$STAGE/usr/bin/"* "$STAGE/usr/lib/audiohawk/audiohawk-update" || true
 
 DEB="$OUT/audiohawk_${VERSION}_${ARCH}.deb"
 dpkg-deb --root-owner-group --build "$STAGE" "$DEB"
