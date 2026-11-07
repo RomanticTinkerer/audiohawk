@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4 - 2026-11-07
+
+### Added
+- 11 new EQ presets in the Equalizer tab: Hip-Hop, R&B, Metal, Piano, Loudness, Spoken Word, Cinema, Gaming, Late Night, Small Speakers, and Bass Reducer
+
+### Changed
+- The chosen preset is saved by name, so adding presets later can't scramble it. Older configs still load, and Custom stays Custom
+
 ## 0.3.3 - 2026-11-07
 
 ### Fixed
