@@ -630,8 +630,14 @@ static int on_metadata_property(void *data, uint32_t id, const char *key,
                     name[end - p] = '\0';
                     if (strcmp(name, AH_NODE_NAME) != 0) {
                         snprintf(eq->default_sink, sizeof(eq->default_sink), "%s", name);
-                        if (!eq->enabled || !eq->hardware_sink[0])
+                        /* User picked another output: follow it. Clearing the id makes the
+                         * recovery thread re-arm onto the new device within ~2 s.
+                         * ponytail: full re-arm drops audio briefly; relink only the filter
+                         * output if that gap gets noticed. */
+                        if (strcmp(eq->hardware_sink, name) != 0) {
                             snprintf(eq->hardware_sink, sizeof(eq->hardware_sink), "%s", name);
+                            eq->hardware_sink_id = 0;
+                        }
                     }
                 }
             }
