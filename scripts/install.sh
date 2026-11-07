@@ -1,5 +1,7 @@
 #!/bin/sh
-# One-command AudioHawk install.
+# One-command AudioHawk install or update. Picks the package for your distro:
+# .deb on apt systems, .rpm on dnf/zypper/rpm systems, the tarball elsewhere.
+# Run from an AppImage (APPIMAGE set), it swaps in the new AppImage without root.
 #
 #   curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/download/install.sh | sudo sh
 #
@@ -7,7 +9,7 @@
 #
 #   sudo ./install.sh
 #
-# Override prefix with PREFIX=/usr sudo ./install.sh
+# Override the tarball prefix with PREFIX=/usr sudo ./install.sh
 set -eu
 
 REPO="RomanticTinkerer/audiohawk"
@@ -26,6 +28,11 @@ need_root() {
     fi
 }
 
+fetch() {
+    echo "Downloading $1"
+    curl -fL --retry 3 -o "$2" "$1" || die "download failed"
+}
+
 stage=""
 script_dir=""
 if [ -n "${0:-}" ] && [ -f "$0" ]; then
@@ -38,10 +45,10 @@ fi
 
 if [ -z "$stage" ]; then
     command -v curl >/dev/null 2>&1 || die "curl is required"
-    command -v tar >/dev/null 2>&1 || die "tar is required"
     [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "amd64" ] || die "only x86_64 packages are published"
 
     tmp=$(mktemp -d)
+    chmod 0755 "$tmp" # apt's sandbox user has to read the .deb
     trap 'rm -rf "$tmp"' EXIT
 
     tag=${AUDIOHAWK_VERSION:-}
@@ -52,9 +59,42 @@ if [ -z "$stage" ]; then
     fi
     [ -n "$tag" ] || die "no release tag found"
     ver=${tag#v}
-    url="https://github.com/${REPO}/releases/download/${tag}/audiohawk-${ver}-x86_64.tar.gz"
-    echo "Downloading $url"
-    curl -fL --retry 3 -o "$tmp/audiohawk.tar.gz" "$url" || die "download failed"
+    base="https://github.com/${REPO}/releases/download/${tag}"
+
+    if [ -n "${APPIMAGE:-}" ] && [ -w "$APPIMAGE" ]; then
+        fetch "$base/AudioHawk-${ver}-x86_64.AppImage" "$APPIMAGE.new"
+        chmod 0755 "$APPIMAGE.new"
+        mv -f "$APPIMAGE.new" "$APPIMAGE"
+        echo "Updated $APPIMAGE to $ver"
+        exit 0
+    fi
+
+    if command -v apt-get >/dev/null 2>&1; then
+        need_root
+        fetch "$base/audiohawk_${ver}_amd64.deb" "$tmp/audiohawk.deb"
+        apt-get install -y "$tmp/audiohawk.deb"
+        echo "Installed AudioHawk $ver (.deb). Run: audiohawk"
+        exit 0
+    fi
+
+    rpm_cmd=""
+    if command -v dnf >/dev/null 2>&1; then
+        rpm_cmd="dnf install -y"
+    elif command -v zypper >/dev/null 2>&1; then
+        rpm_cmd="zypper --non-interactive install --allow-unsigned-rpm"
+    elif command -v rpm >/dev/null 2>&1; then
+        rpm_cmd="rpm -U --replacepkgs"
+    fi
+    if [ -n "$rpm_cmd" ]; then
+        need_root
+        fetch "$base/audiohawk-${ver}-1.x86_64.rpm" "$tmp/audiohawk.rpm"
+        $rpm_cmd "$tmp/audiohawk.rpm"
+        echo "Installed AudioHawk $ver (.rpm). Run: audiohawk"
+        exit 0
+    fi
+
+    command -v tar >/dev/null 2>&1 || die "tar is required"
+    fetch "$base/audiohawk-${ver}-x86_64.tar.gz" "$tmp/audiohawk.tar.gz"
     tar -xzf "$tmp/audiohawk.tar.gz" -C "$tmp"
     stage=$(find "$tmp" -maxdepth 2 -type d -name usr -exec dirname {} \; | head -n1)
     [ -n "$stage" ] && [ -x "$stage/usr/bin/audiohawk" ] || die "tarball missing usr/bin/audiohawk"
