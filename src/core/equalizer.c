@@ -35,6 +35,17 @@ static const float k_preset_10[AH_EQ_PRESET_COUNT - 1][10] = {
     /* Vocal */       { -3.0f, -2.0f, -1.0f, -0.5f, 0.5f, 2.0f, 3.5f, 3.5f, 2.0f, 1.5f },
     /* Treble Boost */{ 0, 0, 0, 0, 0.5f, 1.0f, 2.0f, 3.5f, 5.0f, 5.5f },
     /* Jazz */        { 3.5f, 2.5f, 1.5f, 0.5f, -2.0f, -1.0f, 0.5f, 2.0f, 3.5f, 4.5f },
+    /* Hip-Hop */     { 5.0f, 4.5f, 2.0f, 3.0f, -1.0f, -1.0f, 1.0f, -0.5f, 2.0f, 3.0f },
+    /* R&B */         { 2.5f, 5.5f, 4.5f, 1.5f, -2.0f, -1.5f, 2.0f, 2.5f, 3.0f, 3.5f },
+    /* Metal */       { 4.5f, 3.5f, 1.0f, 0, -2.0f, -1.0f, 1.5f, 3.5f, 4.0f, 3.0f },
+    /* Piano */       { 1.5f, 1.0f, 0, 1.5f, 2.0f, 1.0f, 2.5f, 3.0f, 2.0f, 2.5f },
+    /* Loudness */    { 6.0f, 4.0f, 1.5f, 0, -1.0f, -1.0f, 0, 1.5f, 4.0f, 5.0f },
+    /* Spoken Word */ { -6.0f, -4.0f, -1.5f, 0, 1.0f, 2.5f, 3.5f, 3.0f, 1.0f, 0 },
+    /* Cinema */      { 4.5f, 3.5f, 1.5f, 0, -0.5f, 0.5f, 2.0f, 2.5f, 2.0f, 2.5f },
+    /* Gaming */      { -2.0f, -1.0f, 0, 0, 0.5f, 1.5f, 3.0f, 4.5f, 3.5f, 1.5f },
+    /* Late Night */  { -3.0f, -2.0f, -0.5f, 0, 1.0f, 1.5f, 1.0f, 0, 0, 0 },
+    /* Small Spkrs */ { -3.0f, 0, 3.5f, 3.0f, 1.0f, 0, 1.0f, 2.0f, 2.5f, 2.0f },
+    /* Bass Reducer */{ -6.0f, -4.5f, -3.0f, -1.5f, -0.5f, 0, 0, 0, 0, 0 },
 };
 
 static const AhEqPresetDef k_presets[AH_EQ_PRESET_COUNT] = {
@@ -48,6 +59,17 @@ static const AhEqPresetDef k_presets[AH_EQ_PRESET_COUNT] = {
     { AH_EQ_PRESET_VOCAL, "Vocal Booster", "Presence focus for voices and podcasts.", "vocal" },
     { AH_EQ_PRESET_TREBLE, "Treble Boost", "Lifted brilliance and air.", "treble" },
     { AH_EQ_PRESET_JAZZ, "Jazz", "Warm lows with clear cymbals and horns.", "jazz" },
+    { AH_EQ_PRESET_HIPHOP, "Hip-Hop", "Punchy kick and 808s with crisp hats.", "hiphop" },
+    { AH_EQ_PRESET_RNB, "R&B", "Round upper bass and smooth, silky vocals.", "rnb" },
+    { AH_EQ_PRESET_METAL, "Metal", "Tight lows and bite in the guitar range.", "metal" },
+    { AH_EQ_PRESET_PIANO, "Piano", "Clear mids and natural hammer attack.", "piano" },
+    { AH_EQ_PRESET_LOUDNESS, "Loudness", "Fuller lows and highs for quiet listening.", "loudness" },
+    { AH_EQ_PRESET_SPOKEN, "Spoken Word", "Trims rumble so speech sits up front.", "spoken" },
+    { AH_EQ_PRESET_CINEMA, "Cinema", "Big low end with clear dialogue.", "cinema" },
+    { AH_EQ_PRESET_GAMING, "Gaming", "Brings out footsteps and positional cues.", "gaming" },
+    { AH_EQ_PRESET_LATE_NIGHT, "Late Night", "Softer bass so you don't wake anyone up.", "latenight" },
+    { AH_EQ_PRESET_SMALL_SPEAKERS, "Small Speakers", "Laptop and phone speakers: upper bass they can play.", "smallspeakers" },
+    { AH_EQ_PRESET_BASS_REDUCER, "Bass Reducer", "Pulls the low end down, for boomy rooms or headphones.", "bassreducer" },
     { AH_EQ_PRESET_CUSTOM, "Custom", "Your saved curve — edits switch here automatically.", "custom" },
 };
 
@@ -272,8 +294,17 @@ int ah_eq_state_load(AhEqualizerState *st)
             st->band_count = (AhBandCount)atoi(val);
         else if (strcmp(key, "view") == 0)
             st->view = (AhEqViewMode)atoi(val);
-        else if (strcmp(key, "preset") == 0)
-            st->preset = (AhEqPresetId)atoi(val);
+        else if (strcmp(key, "preset") == 0) {
+            st->preset = AH_EQ_PRESET_COUNT; /* unknown -> Flat below */
+            for (int i = 0; i < AH_EQ_PRESET_COUNT; ++i)
+                if (strcmp(val, k_presets[i].key) == 0)
+                    st->preset = (AhEqPresetId)i;
+            /* Up to 0.3.3 the id was saved as a number and Custom was 10. */
+            if (val[0] >= '0' && val[0] <= '9') {
+                int legacy = atoi(val);
+                st->preset = legacy == 10 ? AH_EQ_PRESET_CUSTOM : (AhEqPresetId)legacy;
+            }
+        }
         else if (strcmp(key, "follow_profile") == 0)
             st->follow_profile = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0);
         else if (strncmp(key, "custom10_", 9) == 0) {
@@ -323,7 +354,7 @@ int ah_eq_state_save(const AhEqualizerState *st)
     fprintf(f, "# AudioHawk equalizer\n");
     fprintf(f, "band_count=%d\n", (int)st->band_count);
     fprintf(f, "view=%d\n", (int)st->view);
-    fprintf(f, "preset=%d\n", (int)st->preset);
+    fprintf(f, "preset=%s\n", ah_eq_preset_by_id(st->preset)->key);
     fprintf(f, "follow_profile=%s\n", st->follow_profile ? "true" : "false");
     for (int i = 0; i < 10; ++i)
         fprintf(f, "custom10_%d=%.3f\n", i, st->custom_10[i]);

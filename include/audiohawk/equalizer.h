@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 #define AH_EQ_BANDS_MAX 20
-#define AH_EQ_PRESET_COUNT 11
+#define AH_EQ_PRESET_COUNT 22
 
 typedef enum {
     AH_BANDS_10 = 10,
@@ -35,14 +35,25 @@ typedef enum {
     AH_EQ_PRESET_VOCAL,
     AH_EQ_PRESET_TREBLE,
     AH_EQ_PRESET_JAZZ,
-    AH_EQ_PRESET_CUSTOM
+    AH_EQ_PRESET_HIPHOP,
+    AH_EQ_PRESET_RNB,
+    AH_EQ_PRESET_METAL,
+    AH_EQ_PRESET_PIANO,
+    AH_EQ_PRESET_LOUDNESS,
+    AH_EQ_PRESET_SPOKEN,
+    AH_EQ_PRESET_CINEMA,
+    AH_EQ_PRESET_GAMING,
+    AH_EQ_PRESET_LATE_NIGHT,
+    AH_EQ_PRESET_SMALL_SPEAKERS,
+    AH_EQ_PRESET_BASS_REDUCER,
+    AH_EQ_PRESET_CUSTOM /* keep last: k_preset_10 has no row for it */
 } AhEqPresetId;
 
 typedef struct {
     AhEqPresetId id;
     const char *name;
     const char *blurb;
-    const char *icon; /* data/icons basename without .svg */
+    const char *key; /* saved in equalizer.conf, never rename */
 } AhEqPresetDef;
 
 typedef struct {
