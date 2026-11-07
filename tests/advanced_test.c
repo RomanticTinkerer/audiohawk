@@ -166,6 +166,32 @@ int main(void)
     ah_advanced_meters(eng, &m);
     CHECK(m.peak >= 0.f);
 
+    /* Room reverb: each channel walks its own delay line, so the first echo lands at 29 ms. */
+    ah_advanced_reset(eng);
+    ah_advanced_defaults(&s);
+    s.on[AH_ADV_ROOM] = true;
+    s.amount[AH_ADV_ROOM] = 100;
+    memset(l, 0, sizeof(float) * (size_t)n);
+    memset(r, 0, sizeof(float) * (size_t)n);
+    l[0] = 1.f;
+    ah_advanced_apply(eng, &s, rate);
+    ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
+    int first = -1;
+    for (int i = 1; i < n && first < 0; ++i)
+        if (fabsf(l[i]) > 1e-6f)
+            first = i;
+    CHECK(first == (29 * (int)rate) / 1000);
+
+    /* Identical L/R reads full mono compatibility. */
+    ah_advanced_reset(eng);
+    ah_advanced_defaults(&s);
+    s.on[AH_ADV_DC] = true;
+    tone(l, r, n, rate, 440.f, 0.3f);
+    ah_advanced_apply(eng, &s, rate);
+    ah_advanced_process_block(eng, l, r, (uint32_t)n, rate);
+    ah_advanced_meters(eng, &m);
+    CHECK(m.corr > 0.98f);
+
     ah_advanced_destroy(eng);
     free(l);
     free(r);

@@ -52,6 +52,7 @@ typedef struct {
     int order;
     uint32_t rate;
     AhBq f[F_COUNT];
+    AhBq spec_bp[AH_ADV_SPEC]; /* log-spaced 40 Hz..16 kHz analyzer bands */
     AhSpatialParams spatial;
     float ir[AH_ADV_IR];
     int comb_len[4];
@@ -65,6 +66,15 @@ typedef struct {
     float loud_target;
 } AhAdvBank;
 
+/* One per reverb so Room and Hall never share delay lines; positions are per channel. */
+typedef struct {
+    float comb[2][4][AH_ADV_COMB];
+    float ap[2][2][AH_ADV_COMB];
+    int comb_pos[2][4];
+    int ap_pos[2][2];
+    float lp[2][4];
+} AhReverb;
+
 struct AhAdvancedEngine {
     AhAdvBank banks[2];
     atomic_int idx;
@@ -72,10 +82,7 @@ struct AhAdvancedEngine {
     uint32_t rate;
     AhBqZ mem[2][F_COUNT];
     AhSpatialState spatial;
-    float comb[2][4][AH_ADV_COMB];
-    float ap[2][2][AH_ADV_COMB];
-    int comb_pos[4];
-    int ap_pos[2];
+    AhReverb room, hall;
     float ir_buf[2][AH_ADV_IR];
     int ir_pos;
     float xdel[2][AH_ADV_XDEL];
@@ -89,12 +96,12 @@ struct AhAdvancedEngine {
     float gm_g;
     float loud_g;
     float agc_g;
-    float comb_lp[2][4];
     float lofi_hold[2];
     int lofi_n;
     float wow_phase;
     uint32_t rng;
     float spec_e[AH_ADV_SPEC];
+    AhBqZ spec_z[AH_ADV_SPEC];
     float peak;
     float clip_hold;
     float dry_ms;
@@ -722,6 +729,20 @@ static void design_highpass(AhBq *bq, float freq, float q, uint32_t rate)
     bq->a2 = (1.f - alpha) / a0;
 }
 
+/* RBJ band-pass, 0 dB peak gain. */
+static void design_bandpass(AhBq *bq, float freq, float q, uint32_t rate)
+{
+    clamp_freq(&freq, rate);
+    const float w0 = 2.f * (float)M_PI * freq / (float)rate;
+    const float alpha = sinf(w0) / (2.f * q);
+    const float a0 = 1.f + alpha;
+    bq->b0 = alpha / a0;
+    bq->b1 = 0.f;
+    bq->b2 = -alpha / a0;
+    bq->a1 = (-2.f * cosf(w0)) / a0;
+    bq->a2 = (1.f - alpha) / a0;
+}
+
 static float bq_run(const AhBq *bq, AhBqZ *m, float x)
 {
     const float y = bq->b0 * x + m->z1;
@@ -951,6 +972,9 @@ static void design_bank(AhAdvBank *b, const AhAdvancedState *s, uint32_t rate)
 
     for (int i = 0; i < F_COUNT; ++i)
         design_unity(&b->f[i]);
+    for (int k = 0; k < AH_ADV_SPEC; ++k)
+        design_bandpass(&b->spec_bp[k], 40.f * powf(400.f, (float)k / (AH_ADV_SPEC - 1)), 2.5f,
+                        rate);
 
     design_highpass_min(&b->f[F_DC], 10.f, 0.707f, rate, 2.f);
     float hp = 20.f + b->amt[AH_ADV_HIGHPASS] * 180.f;
@@ -1093,28 +1117,21 @@ static float ap_tick(float *buf, int len, int *pos, float x, float g)
     return y;
 }
 
-static void run_reverb(AhAdvancedEngine *e, const AhAdvBank *b, float *l, float *r,
-                       const int *lens, float fb, float wet, float damp)
+static void run_reverb(AhReverb *v, float *l, float *r, const int *lens, float fb, float wet,
+                       float damp)
 {
-    float inl = *l, inr = *r;
-    float acc_l = 0.f, acc_r = 0.f;
-    for (int c = 0; c < 4; ++c) {
-        acc_l += comb_tick(e->comb[0][c], lens[c], &e->comb_pos[c], inl, fb,
-                           &e->comb_lp[0][c], damp);
-        acc_r += comb_tick(e->comb[1][c], lens[c], &e->comb_pos[c], inr, fb,
-                           &e->comb_lp[1][c], damp);
+    float in[2] = { *l, *r };
+    float acc[2] = { 0.f, 0.f };
+    for (int ch = 0; ch < 2; ++ch) {
+        for (int c = 0; c < 4; ++c)
+            acc[ch] += comb_tick(v->comb[ch][c], lens[c], &v->comb_pos[ch][c], in[ch], fb,
+                                 &v->lp[ch][c], damp);
+        acc[ch] *= 0.25f;
+        acc[ch] = ap_tick(v->ap[ch][0], lens[0] / 3, &v->ap_pos[ch][0], acc[ch], 0.5f);
+        acc[ch] = ap_tick(v->ap[ch][1], lens[1] / 4, &v->ap_pos[ch][1], acc[ch], 0.5f);
     }
-    acc_l *= 0.25f;
-    acc_r *= 0.25f;
-    int ap_len0 = lens[0] / 3;
-    int ap_len1 = lens[1] / 4;
-    acc_l = ap_tick(e->ap[0][0], ap_len0, &e->ap_pos[0], acc_l, 0.5f);
-    acc_r = ap_tick(e->ap[1][0], ap_len0, &e->ap_pos[0], acc_r, 0.5f);
-    acc_l = ap_tick(e->ap[0][1], ap_len1, &e->ap_pos[1], acc_l, 0.5f);
-    acc_r = ap_tick(e->ap[1][1], ap_len1, &e->ap_pos[1], acc_r, 0.5f);
-    (void)b;
-    *l = inl + acc_l * wet;
-    *r = inr + acc_r * wet;
+    *l = in[0] + acc[0] * wet;
+    *r = in[1] + acc[1] * wet;
 }
 
 static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l, float *r)
@@ -1448,10 +1465,10 @@ static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l
         ah_spatial_process(&e->spatial, &b->spatial, &left, &right);
         break;
     case AH_ADV_ROOM:
-        run_reverb(e, b, &left, &right, b->comb_len, 0.58f, a * 0.20f, 0.28f);
+        run_reverb(&e->room, &left, &right, b->comb_len, 0.58f, a * 0.20f, 0.28f);
         break;
     case AH_ADV_HALL:
-        run_reverb(e, b, &left, &right, b->hall_len, 0.76f, a * 0.30f, 0.16f);
+        run_reverb(&e->hall, &left, &right, b->hall_len, 0.76f, a * 0.30f, 0.16f);
         break;
     case AH_ADV_CONVOLVE: {
         e->ir_buf[0][e->ir_pos] = left;
@@ -1589,8 +1606,8 @@ void ah_advanced_reset(AhAdvancedEngine *eng)
         return;
     memset(eng->mem, 0, sizeof(eng->mem));
     memset(&eng->spatial, 0, sizeof(eng->spatial));
-    memset(eng->comb, 0, sizeof(eng->comb));
-    memset(eng->ap, 0, sizeof(eng->ap));
+    memset(&eng->room, 0, sizeof(eng->room));
+    memset(&eng->hall, 0, sizeof(eng->hall));
     memset(eng->ir_buf, 0, sizeof(eng->ir_buf));
     memset(eng->xdel, 0, sizeof(eng->xdel));
     memset(eng->env, 0, sizeof(eng->env));
@@ -1599,8 +1616,8 @@ void ah_advanced_reset(AhAdvancedEngine *eng)
     memset(eng->bs2b_hi, 0, sizeof(eng->bs2b_hi));
     memset(eng->adaa, 0, sizeof(eng->adaa));
     ah_limiter_init(&eng->lim, eng->rate ? eng->rate : 48000, -0.3f, 2.f, 40.f, true);
-    memset(eng->comb_lp, 0, sizeof(eng->comb_lp));
     memset(eng->spec_e, 0, sizeof(eng->spec_e));
+    memset(eng->spec_z, 0, sizeof(eng->spec_z));
     eng->lofi_n = 0;
     eng->xpos = 0;
     eng->ir_pos = 0;
@@ -1659,11 +1676,10 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
         if (p > peak)
             peak = p;
 
-        float mag = 0.5f * (fabsf(l) + fabsf(r));
+        const float mono = 0.5f * (l + r);
         for (int k = 0; k < AH_ADV_SPEC; ++k) {
-            float alpha = 0.02f + 0.06f * (float)k / (float)AH_ADV_SPEC;
-            spec[k] += alpha * (mag - spec[k]);
-            mag *= 0.72f;
+            const float y = fabsf(bq_run(&b->spec_bp[k], &eng->spec_z[k], mono));
+            spec[k] += 0.0005f * (y - spec[k]);
         }
 
         left[i] = l;
@@ -1673,13 +1689,15 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
     if (b->gain_match && !b->ab) {
         float g = (wet_acc > 1e-10f) ? sqrtf(dry_acc / wet_acc) : 1.f;
         g = clampf(g, 0.4f, 2.f);
+        const float g0 = eng->gm_g;
         eng->gm_g += 0.18f * (g - eng->gm_g);
-        g = eng->gm_g;
+        const float step = (eng->gm_g - g0) / (float)n;
         wet_acc = 0.f;
         corr = 0.f;
         energy = 0.f;
         peak = 0.f;
         for (uint32_t i = 0; i < n; ++i) {
+            g = g0 + step * (float)(i + 1);
             left[i] *= g;
             right[i] *= g;
             wet_acc += left[i] * left[i] + right[i] * right[i];
@@ -1712,7 +1730,7 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
     atomic_store(&eng->pub_peak, (int)(eng->peak * 1000.f));
     atomic_store(&eng->pub_clip, eng->clip_hold > 0.f ? 1 : 0);
     atomic_store(&eng->pub_cpu, (int)(eng->cpu * 1000.f));
-    float corr_n = energy > 1e-12f ? (corr / (energy * 2.f)) : 1.f;
+    float corr_n = energy > 1e-12f ? (corr / energy) : 1.f;
     if (corr_n > 1.f)
         corr_n = 1.f;
     if (corr_n < -1.f)
@@ -1721,9 +1739,8 @@ void ah_advanced_process_block(AhAdvancedEngine *eng, float *left, float *right,
     atomic_store(&eng->pub_dry, (int)(eng->dry_ms * 1000.f));
     atomic_store(&eng->pub_wet, (int)(eng->wet_ms * 1000.f));
     for (int k = 0; k < AH_ADV_SPEC; ++k) {
-        float v = spec[k] * 8.f;
-        if (v > 1.f)
-            v = 1.f;
+        /* -60..0 dB onto the bar height. */
+        const float v = clampf((20.f * log10f(spec[k] + 1e-9f) + 60.f) / 60.f, 0.f, 1.f);
         atomic_store(&eng->pub_spec[k], (int)(v * 1000.f));
     }
 }
