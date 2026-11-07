@@ -27,12 +27,9 @@ int ah_core_sync_pipeline(AhCore *core)
         (void)ah_pw_eq_apply_advanced(core->eq, &adv_off);
     }
 
-    if (ah_pw_eq_enable(core->eq, want) != 0) {
-        if (want)
-            core->settings.eq_enabled = false;
-        return -1;
-    }
-    return 0;
+    /* A failed arm (PipeWire still starting at login) keeps the user's choice; the
+     * recovery thread arms the graph once PipeWire answers. */
+    return ah_pw_eq_enable(core->eq, want);
 }
 
 int ah_core_apply_listening(AhCore *core)
@@ -171,11 +168,11 @@ int ah_core_set_eq_enabled(AhCore *core, bool enabled)
             ah_core_refresh_eq(core);
     }
 
-    if (ah_core_sync_pipeline(core) != 0) {
-        if (enabled) {
-            core->settings.eq_enabled = false;
-            return -1;
-        }
+    if (ah_core_sync_pipeline(core) != 0 && enabled) {
+        /* The switch flips back off, so drop the intent too or recovery arms it behind the UI. */
+        core->settings.eq_enabled = false;
+        (void)ah_core_sync_pipeline(core);
+        return -1;
     }
     return ah_settings_save(&core->settings);
 }
