@@ -55,18 +55,22 @@ Enable **Start on system startup** in Settings to launch hidden at login (`--bac
 
 ## Install
 
-One command (x86_64, needs sudo, curl, and tar):
+One command (x86_64, needs sudo and curl):
 
 ```bash
 curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/download/install.sh | sudo sh
 ```
 
-That downloads the release tarball and copies it to `/usr/local`. Packages are also on [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases):
+It installs the `.deb` on apt distros and the `.rpm` on dnf, zypper, or rpm distros. Anywhere else it copies the tarball to `/usr/local`. Run the same command again to update.
+
+AudioHawk also checks GitHub for a new version each time it starts, including at login. The status sits in the top-left corner of the window. When an update is out, click it, type your password, and AudioHawk installs the new version and restarts. AppImages update themselves without a password.
+
+Packages are also on [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases):
 
 ```bash
-sudo dpkg -i audiohawk_0.3.4_amd64.deb
-sudo rpm -i audiohawk-0.3.4-1.x86_64.rpm
-chmod +x AudioHawk-0.3.4-x86_64.AppImage
+sudo dpkg -i audiohawk_0.3.5_amd64.deb
+sudo rpm -i audiohawk-0.3.5-1.x86_64.rpm
+chmod +x AudioHawk-0.3.5-x86_64.AppImage
 ```
 
 Build packages locally with `./scripts/package.sh`. After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).

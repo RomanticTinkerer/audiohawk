@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 - 2026-11-07
+
+### Added
+- Updates: AudioHawk checks GitHub for a new version each time it starts, including at login. The status shows in the top-left corner of the window, and a notification pops up if AudioHawk started hidden. Click **Update to x.y.z**, type your password, and it installs the new version and restarts
+- AppImages update themselves in place, no password needed
+
+### Changed
+- The `curl ... install.sh | sudo sh` command installs the `.deb` on apt distros and the `.rpm` on dnf, zypper, or rpm distros, instead of always copying the tarball to `/usr/local`
+- The `.deb` recommends `curl` and `pkexec`, which updates use
+
 ## 0.3.4 - 2026-11-07
 
 ### Added
