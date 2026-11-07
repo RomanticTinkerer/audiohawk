@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "settings_page.h"
 #include "tray.h"
+#include "updater.h"
 
 #include <adwaita.h>
 #include <gtk/gtk.h>
@@ -473,6 +474,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     gtk_widget_set_tooltip_text(reset_btn, "Put every AudioHawk setting back to its default");
     g_signal_connect(reset_btn, "clicked", G_CALLBACK(on_reset_clicked), shell);
     adw_header_bar_pack_end(header, reset_btn);
+    adw_header_bar_pack_start(header, ah_updater_new(G_APPLICATION(app), tray_quit, shell));
 
     adw_toolbar_view_add_top_bar(toolbar, GTK_WIDGET(header));
 

@@ -73,6 +73,7 @@ Section: sound
 Priority: optional
 Architecture: ${DEB_ARCH}
 Depends: libpipewire-0.3-0 | libpipewire-0.3-0t64, libgtk-4-1, libadwaita-1-0, libglib2.0-0 | libglib2.0-0t64
+Recommends: curl, pkexec | policykit-1
 Maintainer: Animesh Singh <253191443+RomanticTinkerer@users.noreply.github.com>
 Installed-Size: ${SIZE_KB}
 Homepage: https://github.com/RomanticTinkerer/audiohawk

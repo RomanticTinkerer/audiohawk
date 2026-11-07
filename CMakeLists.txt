@@ -90,6 +90,7 @@ if(AUDIOHAWK_BUILD_GTK)
             src/gtk/advanced_page.c
             src/gtk/icons.c
             src/gtk/tray.c
+            src/gtk/updater.c
         )
         target_include_directories(audiohawk-gtk PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk
