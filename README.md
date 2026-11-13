@@ -1,151 +1,95 @@
 # AudioHawk
 
-PipeWire equalizer and listening-profile controller for GNU/Linux.
+**A simple audio enhancer for GNU/Linux.**
 
-AudioHawk is written in **C** (core, GTK UI, and launcher) using GTK4 and libadwaita.
+AudioHawk is a PipeWire-based audio equalizer and listening-profile manager, built in C with GTK4 and libadwaita.
 
-## Dashboard (this release)
+## Features
 
-- **EQ Settings** on/off — arms a PipeWire filter-chain virtual sink (`audiohawk.eq`)
-- **Profiles** (horizontal scroll): Music, Movie/Video, Game, Work, Casual, Mood
-- **Intelligent Equalizer**: Off, Detailed, Warm, Balanced
-- **Per App Audio Profiles**: auto-switch, per-device memory, manage/seed app mappings
-- **System pitch** — shift all AudioHawk-routed audio from -15 to +15 semitones
-- **Start on system startup** — XDG autostart (Settings); launches hidden with `--background`
-- **Suspend survival** — reconnects to PipeWire after sleep and re-arms EQ automatically
-- **Reset Configs** button in the header (and the tray menu) puts every setting back to its default
-- **About** tab lists the developers, GitHub contributors, and the projects AudioHawk builds on
-## Dependencies
+- **Equalizer:** Enable or disable system-wide audio enhancement with one switch.
+- **Listening Profiles:** Switch between Music, Movie/Video, Game, Work, Casual, and Mood presets.
+- **Intelligent Equalizer:** Choose between Off, Detailed, Warm, and Balanced sound adjustments.
+- **Per-App Profiles:** Automatically apply different audio settings to individual applications.
+- **Device Memory:** Remember your application audio preferences for different output devices.
+- **System Pitch:** Adjust the pitch of routed system audio by up to 15 semitones in either direction.
+- **Virtual Surround:** Add a wider, more spatial sound to ordinary stereo audio.
+- **Automatic Recovery:** AudioHawk reconnects and restores your audio setup after your computer wakes from sleep.
+- **Startup Support:** Start AudioHawk automatically when you log in.
+- **Persistent Settings:** Your preferences are saved between sessions.
 
-**Required**
+## Listening Profiles
 
-- CMake ≥ 3.20
-- GCC/Clang with C11
-- PipeWire (`libpipewire-0.3` / `pipewire-devel`)
+AudioHawk comes with six profiles, each designed around a different listening experience.
 
-**GTK UI**
+| Profile | Designed for |
+|---|---|
+| Music | Rich bass and clearer highs |
+| Movie/Video | Clear dialogue and controlled bass |
+| Game | Greater emphasis on important in-game sounds |
+| Work | Comfortable, speech-focused audio |
+| Casual | A softer, warmer sound |
+| Mood | Deeper bass and brighter highs |
 
-- `gtk4-devel` + `libadwaita-devel` (Fedora)
-- `libgtk-4-dev` + `libadwaita-1-dev` (Debian/Ubuntu)
+You can also use Intelligent Equalizer modes to further adjust your selected profile.
 
-## Build
+## Getting Started
+
+### Requirements
+
+- GNU/Linux
+- PipeWire
+- CMake 3.20 or newer
+- GCC or Clang with C11 support
+
+For the graphical interface:
+
+- GTK4
+- libadwaita
+
+### Install
+
+The easiest way to install AudioHawk is through its installation script.
+
+```bash
+curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/download/install.sh | sudo sh
+```
+
+The installer automatically selects the appropriate package for supported distributions.
+
+AudioHawk supports:
+- Debian and Ubuntu-based distributions (`.deb`)
+- Fedora and other RPM-based distributions (`.rpm`)
+- Other distributions through a portable installation
+
+Run the same command again to update an existing installation.
+
+You can also download packages directly from [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases).
+
+### Build from Source
+
+Install the required development dependencies, then run:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ```
 
-```bash
-# Fedora example for the GTK binary
-sudo dnf install gtk4-devel libadwaita-devel
-```
-
-## Run
+Launch AudioHawk:
 
 ```bash
-./build/audiohawk          # launcher
-./build/audiohawk-gtk      # GTK dashboard
+./build/audiohawk
 ```
 
-Turn **Equalizer** on. AudioHawk creates a virtual sink and moves output streams to it via PipeWire metadata (EasyEffects-style), then runs EQ/effects into your real speakers. The system default sink is left alone.
-
-Closing the window keeps AudioHawk running so EQ stays active. After suspend/resume, AudioHawk reconnects to PipeWire and re-arms the graph automatically.
-
-Enable **Start on system startup** in Settings to launch hidden at login (`--background` via XDG autostart).
-
-## Install
-
-One command (x86_64, needs sudo and curl):
+Or launch the graphical dashboard directly:
 
 ```bash
-curl -fsSL https://github.com/RomanticTinkerer/audiohawk/releases/latest/download/install.sh | sudo sh
+./build/audiohawk-gtk
 ```
 
-It installs the `.deb` on apt distros and the `.rpm` on dnf, zypper, or rpm distros. Anywhere else it copies the tarball to `/usr/local`. Run the same command again to update.
+## How It Works
 
-AudioHawk also checks GitHub for a new version each time it starts, including at login. The status sits in the top-left corner of the window. With the `.deb`, `.rpm`, or AppImage, a new version installs by itself and AudioHawk restarts, no password needed. The packages ship a polkit rule that lets the person at the desktop run only AudioHawk's update helper, which installs the latest release from GitHub and nothing else. Tarball installs show an **Update** button that asks for your password.
+AudioHawk creates its own virtual audio output using PipeWire.
 
-Packages are also on [GitHub Releases](https://github.com/RomanticTinkerer/audiohawk/releases):
+When you enable the equalizer, your audio is routed through AudioHawk before reaching your speakers or headphones. This allows AudioHawk to apply your selected sound settings without changing your system's default audio device.
 
-```bash
-sudo dpkg -i audiohawk_0.3.5b_amd64.deb
-sudo rpm -i audiohawk-0.3.5b-1.x86_64.rpm
-chmod +x AudioHawk-0.3.5b-x86_64.AppImage
-```
-
-Build packages locally with `./scripts/package.sh`. After install, AudioHawk appears in GNOME Overview / KDE Application Launcher as **AudioHawk** — *A simple audio enhancer.* Closing the window keeps it in the system tray (Show / Quit from the tray menu).
-
-## Stereo virtual surround
-
-Enable **Stereo Surround Virtualizer** under Settings. Spatial strength defaults to 50%. Bass and treble lift each
-default to +25% amplitude, approximately +1.94 dB, and can be adjusted independently
-from 0 to 100% extra amplitude in 5% steps. These shelves add to the existing EQ
-and enhancer tuning only while surround is enabled. Strength at zero removes
-spatial distribution but keeps the selected tone lift; disable surround to bypass both.
-Existing configuration files retain their surround on/off setting and receive the
-new defaults when these keys are absent.
-
-The processor preserves the direct left and right signals and adds band-limited
-width, a 0.32 ms opposite-ear delay, and a 12 ms opposite-channel room reflection.
-Filtering the added signal approximates the quieter, darker sound reaching the
-opposite ear. The channels use identical processing, keeping centered vocals centered.
-The previous implementation high-passed the entire side signal, losing stereo bass,
-and applied reflections even with surround disabled. This version filters only the
-added spatial signal and fades surround on/off with a 20 ms time constant.
-
-This is a stereo virtualizer inspired by binaural principles, not a Dolby Atmos
-decoder, licensed Dolby renderer, or measured HRTF renderer. Dolby describes
-[HRTF filtering and spatial metadata](https://professional.dolby.com/categories/mobile/dolby-atmos-for-mobile-devices/)
-and [binaural spatialization settings](https://professionalsupport.dolby.com/s/article/What-is-Binaural-Render-Mode-and-how-do-the-settings-affect-my-mix).
-AudioHawk receives two channels, so it cannot recover original object positions or
-height channels. Headphones provide the most controlled result; speakers also mix
-acoustically in the room.
-
-AudioHawk sets an automatic preamp from the summed curve of the EQ, enhancers, and
-surround shelves, so a boost never pushes audio past full scale by itself. A 1.5 ms
-lookahead limiter at 0 dBFS sits at the very end and catches what's left (Volume
-Boost, crossfeed, leveler). It turns the gain down smoothly instead of clipping,
-keeps the L/R ratio, and passes anything below the ceiling untouched. Delayed
-signals can still interfere at some frequencies, so +25% describes the shelf gain,
-not 25% more perceived loudness. The output limiter watches sample peaks; the
-Advanced limiter also estimates inter-sample peaks.
-
-Settings persist in `~/.config/audiohawk/effects.conf`:
-
-```ini
-surround_virtualizer=true
-surround_amount=50
-surround_bass=25
-surround_treble=25
-```
-
-### DSP tests on Windows or GNU/Linux
-
-The portable C DSP tests require no PipeWire or desktop libraries:
-
-```sh
-cmake -S . -B build-dsp -DAUDIOHAWK_DSP_TESTS_ONLY=ON
-cmake --build build-dsp
-ctest --test-dir build-dsp --output-on-failure
-```
-
-On GNU/Linux, also build the full application using the earlier commands and run
-`ctest --test-dir build --output-on-failure`. Listen to centered speech, hard-panned
-audio, bass-heavy stereo, and mono material while toggling surround and adjusting
-the three controls. Verify settings after relaunch and check playback after a
-device or sample-rate change. The portable tests cover shelf gain, stereo symmetry,
-cross-channel output, bass retention, bypass, sample ceilings, and settings migration
-at 44.1, 48, 96, 192, and 384 kHz; they do not validate live PipeWire routing or UI rendering.
-
-## Profile intent
-
-| Profile | Curve idea |
-|---------|------------|
-| Music | Smiling curve — bass + air |
-| Movie/Video | Dialog clarity, controlled rumble |
-| Game | Competitive presence (footsteps/cues) |
-| Work | Speech-first, low fatigue |
-| Casual | Soft warmth |
-| Mood | Deep lows + airy highs |
-
-Intelligent modes reshape the active profile (detail boost, warmth, or balanced compression).
+You can close the dashboard without stopping AudioHawk. It continues
