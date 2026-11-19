@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-11-19
 
 ### Changed
 - Advanced tab: every effect now has its own controls in real units instead of one 0 to 100 amount. The compressor has threshold, ratio, attack, release, knee and makeup gain. The reverbs have size, decay time, high cut and wet level. The parametric EQ has frequency, gain and Q for each band, and so on for all 39 effects, 134 controls in total
