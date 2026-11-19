@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Advanced tab: every effect now has its own controls in real units instead of one 0 to 100 amount. The compressor has threshold, ratio, attack, release, knee and makeup gain. The reverbs have size, decay time, high cut and wet level. The parametric EQ has frequency, gain and Q for each band, and so on for all 39 effects, 134 controls in total
+- Each control has a slider plus a number box for exact values, a tick at its default, and every effect has a reset button. Click an effect to open its controls
+- Old Advanced settings keep which effects were on. The old amounts don't map onto real units, so the controls start at their defaults
+
+### Fixed
+- The tray icon comes back when the bar or shell restarts (waybar reload, Quickshell, AGS), or when it starts after AudioHawk
+- Saturation effects (Exciter, Analog Warmth, Tube, Tape, Distortion) flipped the negative half of the wave, which sounded harsh and added a constant offset. They saturate properly now
+- Sliders that did nothing now work: De-Esser, Dynamic Treble, Transient Shaper, True Peak Limiter, DC Offset Removal and 3D Spatial Audio
+- Spectral Gate worked backwards (higher settings gated less). It has a normal threshold, range and release now
+- Resonance Tamer and Dynamic EQ act on their own band instead of turning the whole signal down
+- Noise Reduction and Spectral Gate follow the level of each band instead of chopping single samples, which used to add distortion
+- Effects no longer share filter memory, so turning two related effects on together (both exciters, both multi-band effects, or the stereo width effects) doesn't corrupt either one
+- Tape wow bends the pitch like a real tape instead of wobbling the volume, vinyl crackle is an occasional click instead of constant noise, and Lo-Fi no longer adds an offset
+- DC Offset Removal stays stable at 192 kHz
+
 ## 0.3.5b - 2026-11-07
 
 ### Changed
