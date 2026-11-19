@@ -31,7 +31,6 @@ struct AhTray {
     gchar *icon_name;
     gchar *icon_theme_path;
     GVariant *icon_pixmap;
-    gboolean registered_with_watcher;
 };
 
 static GVariant *menu_item(gint32 id, const char *label)
@@ -285,35 +284,21 @@ static const gchar *menu_xml =
     "  </interface>"
     "</node>";
 
-static void register_with_watcher(AhTray *tray)
-{
-    if (!tray->conn || tray->registered_with_watcher)
-        return;
-
-    GError *err = NULL;
-    g_dbus_connection_call_sync(
-        tray->conn,
-        "org.kde.StatusNotifierWatcher",
-        "/StatusNotifierWatcher",
-        "org.kde.StatusNotifierWatcher",
-        "RegisterStatusNotifierItem",
-        g_variant_new("(s)", tray->bus_name),
-        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
-    if (err) {
-        g_debug("AudioHawk tray: watcher register failed: %s", err->message);
-        g_error_free(err);
-        return;
-    }
-    tray->registered_with_watcher = TRUE;
-}
-
+/* Runs every time a watcher shows up, so the icon comes back when the bar or
+ * shell restarts (waybar reload, Quickshell, AGS), or starts after AudioHawk. */
 static void on_watcher_appeared(GDBusConnection *c, const gchar *name,
                                 const gchar *owner, gpointer user_data)
 {
-    (void)c;
+    AhTray *tray = user_data;
     (void)name;
     (void)owner;
-    register_with_watcher(user_data);
+    g_dbus_connection_call(c,
+                           "org.kde.StatusNotifierWatcher",
+                           "/StatusNotifierWatcher",
+                           "org.kde.StatusNotifierWatcher",
+                           "RegisterStatusNotifierItem",
+                           g_variant_new("(s)", tray->bus_name),
+                           NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL, NULL);
 }
 
 static gboolean try_svg(char *out, size_t n, const char *fmt, ...)
@@ -548,7 +533,6 @@ AhTray *ah_tray_create(GtkApplication *app,
         tray->conn, "org.kde.StatusNotifierWatcher",
         G_BUS_NAME_WATCHER_FLAGS_NONE,
         on_watcher_appeared, NULL, tray, NULL);
-    register_with_watcher(tray);
     return tray;
 }
 
