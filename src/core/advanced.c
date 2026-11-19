@@ -794,12 +794,9 @@ static float tanh_adaa(float *z, float x)
     float d = x - x1;
     if (fabsf(d) < 1e-5f)
         return tanhf(0.5f * (x + x1));
-    float Fx = fabsf(x) + logf((1.f + expf(-2.f * fabsf(x))) * 0.5f);
-    float Fx1 = fabsf(x1) + logf((1.f + expf(-2.f * fabsf(x1))) * 0.5f);
-    if (x < 0.f)
-        Fx = -Fx;
-    if (x1 < 0.f)
-        Fx1 = -Fx1;
+    /* log(cosh) is even, so both halves of the wave use the same formula. */
+    const float Fx = fabsf(x) + logf((1.f + expf(-2.f * fabsf(x))) * 0.5f);
+    const float Fx1 = fabsf(x1) + logf((1.f + expf(-2.f * fabsf(x1))) * 0.5f);
     return (Fx - Fx1) / d;
 }
 
