@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 #define AH_ADV_SLOTS 39
+#define AH_ADV_PARAMS 9 /* most controls any one effect has */
 #define AH_ADV_SPEC 16
 #define AH_ADV_APPS 8
 #define AH_ADV_PRESETS 6
@@ -57,9 +58,17 @@ typedef enum {
     AH_ADV_FD_WIDTH
 } AhAdvSlot;
 
+/* One tunable control of an effect, in real units. */
+typedef struct {
+    const char *key; /* saved in advanced.conf, never rename */
+    const char *label;
+    const char *unit;
+    float min, max, step, def;
+} AhAdvParam;
+
 typedef struct {
     bool on[AH_ADV_SLOTS];
-    int amount[AH_ADV_SLOTS]; /* 0..100 */
+    float param[AH_ADV_SLOTS][AH_ADV_PARAMS]; /* see ah_advanced_param() */
     bool ab_bypass;
     bool gain_match;
     bool per_app;
@@ -69,7 +78,7 @@ typedef struct {
     struct {
         char name[AH_ADV_APP_NAME];
         bool on[AH_ADV_SLOTS];
-        int amount[AH_ADV_SLOTS];
+        float param[AH_ADV_SLOTS][AH_ADV_PARAMS];
     } apps[AH_ADV_APPS];
     int n_apps;
 } AhAdvancedState;
@@ -102,6 +111,8 @@ const char *ah_advanced_slot_blurb(int slot);
 const char *ah_advanced_slot_icon(int slot);
 const char *ah_advanced_slot_group(int slot);
 int ah_advanced_slot_tab(int slot); /* 0 enhance, 1 fun, 2 process */
+int ah_advanced_param_count(int slot);
+const AhAdvParam *ah_advanced_param(int slot, int index); /* NULL when out of range */
 
 const char *ah_advanced_preset_name(int id);
 const char *ah_advanced_order_name(int id);

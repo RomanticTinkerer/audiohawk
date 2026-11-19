@@ -25,30 +25,13 @@ typedef struct {
     AdwComboRow *preset;
     AdwComboRow *order;
     AdwComboRow *app;
-    AdwSwitchRow *sw[AH_ADV_SLOTS];
-    GtkWidget *scale[AH_ADV_SLOTS];
+    AdwExpanderRow *row[AH_ADV_SLOTS]; /* its switch turns the effect on */
+    GtkAdjustment *adj[AH_ADV_SLOTS][AH_ADV_PARAMS];
     guint meter_id;
     gboolean suppress;
 } AdvPage;
 
-static int scale_int(GtkWidget *scale)
-{
-    return (int)(gtk_range_get_value(GTK_RANGE(scale)) + 0.5);
-}
-
-static void set_scale(GtkWidget *scale, int value)
-{
-    gtk_range_set_value(GTK_RANGE(scale), (double)value);
-}
-
-static char *format_percent(GtkScale *scale, double value, gpointer user_data)
-{
-    (void)scale;
-    (void)user_data;
-    return g_strdup_printf("%.0f%%", value);
-}
-
-/* Wheel over a slider scrolls the page instead, so skimming 39 rows can't change amounts. */
+/* Wheel over a control scrolls the page instead, so skimming the list can't change a value. */
 static gboolean on_scale_scroll(GtkEventControllerScroll *ctl, double dx, double dy,
                                 gpointer user_data)
 {
@@ -66,30 +49,19 @@ static gboolean on_scale_scroll(GtkEventControllerScroll *ctl, double dx, double
     return TRUE;
 }
 
-static GtkWidget *make_percent_scale(int value)
+static void scroll_page_instead(GtkWidget *w)
 {
-    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 100, 5);
     GtkEventController *scroll = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
     gtk_event_controller_set_propagation_phase(scroll, GTK_PHASE_CAPTURE);
     g_signal_connect(scroll, "scroll", G_CALLBACK(on_scale_scroll), NULL);
-    gtk_widget_add_controller(scale, scroll);
-    gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
-    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
-    gtk_scale_set_digits(GTK_SCALE(scale), 0);
-    gtk_widget_set_size_request(scale, 170, -1);
-    gtk_widget_set_valign(scale, GTK_ALIGN_CENTER);
-    gtk_scale_set_format_value_func(GTK_SCALE(scale), format_percent, NULL, NULL);
-    set_scale(scale, value);
-    return scale;
+    gtk_widget_add_controller(w, scroll);
 }
 
 static void refresh_sensitivity(AdvPage *p)
 {
     int active[3] = { 0, 0, 0 };
     for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-        const gboolean on = adw_switch_row_get_active(p->sw[i]);
-        gtk_widget_set_sensitive(p->scale[i], on);
-        if (on)
+        if (adw_expander_row_get_enable_expansion(p->row[i]))
             active[ah_advanced_slot_tab(i)]++;
     }
     gtk_widget_set_sensitive(GTK_WIDGET(p->app), adw_switch_row_get_active(p->per_app));
@@ -112,6 +84,15 @@ static void mark_custom(AdvPage *p)
     p->suppress = FALSE;
 }
 
+static void read_chain(AdvPage *p, AhAdvancedState *s)
+{
+    for (int slot = 0; slot < AH_ADV_SLOTS; ++slot) {
+        s->on[slot] = adw_expander_row_get_enable_expansion(p->row[slot]);
+        for (int i = 0; i < AH_ADV_PARAMS && p->adj[slot][i]; ++i)
+            s->param[slot][i] = (float)gtk_adjustment_get_value(p->adj[slot][i]);
+    }
+}
+
 static void push_state(AdvPage *p)
 {
     if (!p || !p->core || p->suppress)
@@ -123,18 +104,12 @@ static void push_state(AdvPage *p)
     s.per_app = adw_switch_row_get_active(p->per_app);
     s.order = (int)adw_combo_row_get_selected(p->order);
     s.preset = (int)adw_combo_row_get_selected(p->preset);
-    for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-        s.on[i] = adw_switch_row_get_active(p->sw[i]);
-        s.amount[i] = scale_int(p->scale[i]);
-    }
+    read_chain(p, &s);
     if (s.per_app) {
         GtkStringObject *obj = GTK_STRING_OBJECT(adw_combo_row_get_selected_item(p->app));
         if (obj)
             ah_advanced_select_app(&s, gtk_string_object_get_string(obj));
-        for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-            s.on[i] = adw_switch_row_get_active(p->sw[i]);
-            s.amount[i] = scale_int(p->scale[i]);
-        }
+        read_chain(p, &s);
         ah_advanced_store_app(&s);
     }
     ah_core_set_advanced(p->core, &s);
@@ -149,9 +124,12 @@ static void fill_from_core(AdvPage *p)
     adw_switch_row_set_active(p->per_app, s->per_app);
     adw_combo_row_set_selected(p->preset, (guint)s->preset);
     adw_combo_row_set_selected(p->order, (guint)s->order);
-    for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-        adw_switch_row_set_active(p->sw[i], s->on[i]);
-        set_scale(p->scale[i], s->amount[i]);
+    for (int slot = 0; slot < AH_ADV_SLOTS; ++slot) {
+        adw_expander_row_set_enable_expansion(p->row[slot], s->on[slot]);
+        /* Switching an effect on opens it. Loading a whole chain shouldn't. */
+        adw_expander_row_set_expanded(p->row[slot], FALSE);
+        for (int i = 0; i < AH_ADV_PARAMS && p->adj[slot][i]; ++i)
+            gtk_adjustment_set_value(p->adj[slot][i], s->param[slot][i]);
     }
     guint app_sel = 0;
     for (int i = 0; i < s->n_apps; ++i) {
@@ -203,22 +181,33 @@ static void on_combo(GObject *obj, GParamSpec *pspec, gpointer user_data)
     push_state(p);
 }
 
-static void on_scale(GtkRange *range, gpointer user_data)
+static void on_param(GtkAdjustment *adj, gpointer user_data)
 {
     AdvPage *p = user_data;
     if (p->suppress)
         return;
-    int v = scale_int(GTK_WIDGET(range));
-    int snapped = ((v + 2) / 5) * 5;
-    if (snapped > 100)
-        snapped = 100;
-    if (snapped < 0)
-        snapped = 0;
-    if (snapped != v) {
+    /* Dragging lands between steps, so snap to the control's own grid. */
+    const AhAdvParam *d = g_object_get_data(G_OBJECT(adj), "ah-param");
+    const double v = gtk_adjustment_get_value(adj);
+    const double snapped =
+        CLAMP(d->min + round((v - d->min) / d->step) * d->step, d->min, d->max);
+    if (fabs(snapped - v) > 1e-6) {
         p->suppress = TRUE;
-        set_scale(GTK_WIDGET(range), snapped);
+        gtk_adjustment_set_value(adj, snapped);
         p->suppress = FALSE;
     }
+    mark_custom(p);
+    push_state(p);
+}
+
+static void on_reset(GtkButton *button, gpointer user_data)
+{
+    AdvPage *p = user_data;
+    const int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "ah-slot"));
+    p->suppress = TRUE;
+    for (int i = 0; i < AH_ADV_PARAMS && p->adj[slot][i]; ++i)
+        gtk_adjustment_set_value(p->adj[slot][i], ah_advanced_param(slot, i)->def);
+    p->suppress = FALSE;
     mark_custom(p);
     push_state(p);
 }
@@ -303,20 +292,71 @@ static void on_destroy(GtkWidget *w, gpointer user_data)
     }
 }
 
-static void add_slot_row(AdvPage *p, AdwPreferencesGroup *g, int i)
+/* One control: name, slider, exact value, unit. Slider and number share one adjustment. */
+static GtkWidget *make_param_row(AdvPage *p, int slot, int i)
 {
-    AdwSwitchRow *sw = ADW_SWITCH_ROW(adw_switch_row_new());
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(sw), ah_advanced_slot_title(i));
-    adw_action_row_set_subtitle(ADW_ACTION_ROW(sw), ah_advanced_slot_blurb(i));
-    adw_action_row_add_prefix(ADW_ACTION_ROW(sw),
-                              ah_icon_image(ah_advanced_slot_icon(i), 22));
-    GtkWidget *scale = make_percent_scale(p->core->advanced.amount[i]);
-    adw_action_row_add_suffix(ADW_ACTION_ROW(sw), scale);
-    adw_preferences_group_add(g, GTK_WIDGET(sw));
-    p->sw[i] = sw;
-    p->scale[i] = scale;
-    g_signal_connect(sw, "notify::active", G_CALLBACK(on_switch), p);
-    g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale), p);
+    const AhAdvParam *d = ah_advanced_param(slot, i);
+    GtkAdjustment *adj =
+        gtk_adjustment_new(p->core->advanced.param[slot][i], d->min, d->max, d->step,
+                           d->step * 10.0, 0.0);
+    g_object_set_data(G_OBJECT(adj), "ah-param", (gpointer)d);
+    p->adj[slot][i] = adj;
+
+    GtkWidget *scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adj);
+    gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
+    gtk_scale_add_mark(GTK_SCALE(scale), d->def, GTK_POS_BOTTOM, NULL); /* the default */
+    gtk_widget_set_size_request(scale, 220, -1);
+    gtk_widget_set_valign(scale, GTK_ALIGN_CENTER);
+    scroll_page_instead(scale);
+
+    const guint digits = d->step >= 1.f ? 0 : d->step >= 0.1f ? 1 : 2;
+    GtkWidget *spin = gtk_spin_button_new(adj, d->step, digits);
+    gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
+    gtk_editable_set_width_chars(GTK_EDITABLE(spin), 7);
+    gtk_widget_set_valign(spin, GTK_ALIGN_CENTER);
+    scroll_page_instead(spin);
+
+    GtkWidget *unit = gtk_label_new(d->unit);
+    gtk_label_set_width_chars(GTK_LABEL(unit), 4);
+    gtk_label_set_xalign(GTK_LABEL(unit), 0.f);
+    gtk_widget_add_css_class(unit, "dim-label");
+
+    AdwActionRow *row = ADW_ACTION_ROW(adw_action_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), d->label);
+    adw_action_row_add_suffix(row, scale);
+    adw_action_row_add_suffix(row, spin);
+    adw_action_row_add_suffix(row, unit);
+    g_signal_connect(adj, "value-changed", G_CALLBACK(on_param), p);
+    return GTK_WIDGET(row);
+}
+
+static void add_slot_row(AdvPage *p, AdwPreferencesGroup *g, int slot)
+{
+    AdwExpanderRow *row = ADW_EXPANDER_ROW(adw_expander_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row), ah_advanced_slot_title(slot));
+    adw_expander_row_set_subtitle(row, ah_advanced_slot_blurb(slot));
+    adw_expander_row_add_prefix(row, ah_icon_image(ah_advanced_slot_icon(slot), 22));
+    adw_expander_row_set_show_enable_switch(row, TRUE);
+    adw_expander_row_set_enable_expansion(row, p->core->advanced.on[slot]);
+    adw_expander_row_set_expanded(row, FALSE);
+    for (int i = 0; i < ah_advanced_param_count(slot); ++i)
+        adw_expander_row_add_row(row, make_param_row(p, slot, i));
+
+    GtkWidget *reset = gtk_button_new_from_icon_name("edit-undo-symbolic");
+    gtk_widget_set_tooltip_text(reset, "Reset to defaults");
+    gtk_widget_set_valign(reset, GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class(reset, "flat");
+    g_object_set_data(G_OBJECT(reset), "ah-slot", GINT_TO_POINTER(slot));
+    g_signal_connect(reset, "clicked", G_CALLBACK(on_reset), p);
+    AdwActionRow *reset_row = ADW_ACTION_ROW(adw_action_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(reset_row), "Reset to defaults");
+    adw_action_row_add_suffix(reset_row, reset);
+    adw_action_row_set_activatable_widget(reset_row, reset);
+    adw_expander_row_add_row(row, GTK_WIDGET(reset_row));
+
+    adw_preferences_group_add(g, GTK_WIDGET(row));
+    p->row[slot] = row;
+    g_signal_connect(row, "notify::enable-expansion", G_CALLBACK(on_switch), p);
 }
 
 static AdwPreferencesPage *make_slot_page(AdvPage *p, int tab, const char *title,
