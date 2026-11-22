@@ -1,4 +1,6 @@
 #include "audiohawk/advanced.h"
+#include "audiohawk/effects.h"
+#include "audiohawk/profiles.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -377,6 +379,45 @@ int main(int argc, char **argv)
     ah_advanced_destroy(eng);
     free(l);
     free(r);
+
+    /* Profile definitions check */
+    const AhProfileDef *defs = ah_profile_defs();
+    for (int p = 0; p < AH_PROFILE_COUNT; ++p) {
+        const AhProfileDef *prof = &defs[p];
+        CHECK(prof->id == (AhProfileId)p);
+
+        /* Copy its fx, run ah_effects_clamp, assert unchanged (memcmp) */
+        AhEffectsState fx_copy = prof->fx;
+        ah_effects_clamp(&fx_copy);
+        CHECK(memcmp(&fx_copy, &prof->fx, sizeof(AhEffectsState)) == 0);
+
+        /* Start from ah_advanced_defaults, ah_advanced_apply_set with its adv, copy, ah_advanced_clamp, assert unchanged */
+        AhAdvancedState adv_st;
+        ah_advanced_defaults(&adv_st);
+        ah_advanced_apply_set(&adv_st, prof->adv);
+        AhAdvancedState adv_copy = adv_st;
+        ah_advanced_clamp(&adv_copy);
+        CHECK(memcmp(&adv_copy, &adv_st, sizeof(AhAdvancedState)) == 0);
+
+        /* Assert every adv entry has slot < AH_ADV_SLOTS and param < ah_advanced_param_count(slot) */
+        if (prof->adv) {
+            for (const AhAdvSet *set = prof->adv; set->slot >= 0; ++set) {
+                CHECK(set->slot < AH_ADV_SLOTS);
+                if (set->param >= 0) {
+                    CHECK(set->param < ah_advanced_param_count(set->slot));
+                }
+            }
+        }
+    }
+
+    /* Assert apply_set keeps a pre-set app_name/n_apps */
+    AhAdvancedState app_test;
+    ah_advanced_defaults(&app_test);
+    snprintf(app_test.app_name, sizeof(app_test.app_name), "test-app");
+    app_test.n_apps = 5;
+    ah_advanced_apply_set(&app_test, defs[0].adv);
+    CHECK(strcmp(app_test.app_name, "test-app") == 0);
+    CHECK(app_test.n_apps == 5);
 
     /* Pass -v to print how much each control moves the sound. */
     check_every_control(argc > 1 && strcmp(argv[1], "-v") == 0);

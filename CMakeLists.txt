@@ -19,7 +19,10 @@ if(BUILD_TESTING)
         tests/advanced_test.c
         src/core/dsp.c
         src/core/advanced.c
-        src/core/spatial.c)
+        src/core/spatial.c
+        src/core/profiles.c
+        src/core/effects.c
+        src/core/pitch.c)
     target_include_directories(audiohawk_spatial_test PRIVATE include)
     if(NOT MSVC)
         target_link_libraries(audiohawk_spatial_test PRIVATE m)

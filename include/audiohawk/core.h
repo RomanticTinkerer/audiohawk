@@ -20,6 +20,7 @@ typedef struct {
     AhEffectsState effects;
     AhAdvancedState advanced;
     AhPipewireEq *eq;
+    unsigned profile_serial;
 } AhCore;
 
 int ah_core_init(AhCore *core);

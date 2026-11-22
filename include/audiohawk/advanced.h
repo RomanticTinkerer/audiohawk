@@ -16,6 +16,13 @@ extern "C" {
 #define AH_ADV_ORDERS 4
 #define AH_ADV_APP_NAME 64
 
+/* A preset or profile switches effects on and overrides a few controls; the rest stay at defaults. */
+typedef struct AhAdvSet {
+    int slot;
+    int param; /* -1: only switch the effect on */
+    float value;
+} AhAdvSet;
+
 typedef enum {
     AH_ADV_DYN_BASS = 0,
     AH_ADV_COMPRESSOR,
@@ -102,6 +109,7 @@ int ah_advanced_load(AhAdvancedState *s);
 int ah_advanced_save(const AhAdvancedState *s);
 
 void ah_advanced_apply_preset(AhAdvancedState *s, int preset);
+void ah_advanced_apply_set(AhAdvancedState *s, const AhAdvSet *set);
 void ah_advanced_select_app(AhAdvancedState *s, const char *name);
 void ah_advanced_store_app(AhAdvancedState *s);
 

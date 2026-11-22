@@ -1,6 +1,8 @@
 #ifndef AUDIOHAWK_PROFILES_H
 #define AUDIOHAWK_PROFILES_H
 
+#include "audiohawk/advanced.h"
+#include "audiohawk/effects.h"
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -8,7 +10,7 @@ extern "C" {
 #endif
 
 #define AH_EQ_BANDS 10
-#define AH_PROFILE_COUNT 6
+#define AH_PROFILE_COUNT 8
 #define AH_INTEL_COUNT 4
 
 typedef enum {
@@ -17,7 +19,9 @@ typedef enum {
     AH_PROFILE_GAME,
     AH_PROFILE_WORK,
     AH_PROFILE_CASUAL,
-    AH_PROFILE_MOOD
+    AH_PROFILE_MOOD,
+    AH_PROFILE_STUDY,
+    AH_PROFILE_SLEEP
 } AhProfileId;
 
 typedef enum {
@@ -38,6 +42,8 @@ typedef struct {
     const char *name;
     const char *blurb;
     AhEqBand bands[AH_EQ_BANDS];
+    AhEffectsState fx;
+    const AhAdvSet *adv;
 } AhProfileDef;
 
 typedef struct {

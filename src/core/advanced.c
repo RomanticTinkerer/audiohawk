@@ -590,12 +590,6 @@ void ah_advanced_select_app(AhAdvancedState *s, const char *name)
 }
 
 /* A preset switches effects on and overrides a few controls; the rest stay at defaults. */
-typedef struct {
-    int slot;
-    int param; /* -1: only switch the effect on */
-    float value;
-} AhAdvSet;
-
 #define ON(slot) { slot, -1, 0 }
 #define END { -1, -1, 0 }
 
@@ -635,6 +629,29 @@ static const AhAdvSet *const k_preset_sets[AH_ADV_PRESETS] = {
     NULL, k_off, k_music, k_headphones, k_movie, k_lofi
 };
 
+void ah_advanced_apply_set(AhAdvancedState *s, const AhAdvSet *set)
+{
+    if (!s)
+        return;
+    memset(s->on, 0, sizeof(s->on));
+    chain_defaults(s->param);
+    s->ab_bypass = false;
+    s->order = 0;
+    s->preset = 0;
+    s->gain_match = false;
+    if (!set)
+        return;
+    for (; set->slot >= 0; ++set) {
+        if (set->param < 0) {
+            if (set->slot < AH_ADV_SLOTS)
+                s->on[set->slot] = true;
+        } else {
+            if (set->slot < AH_ADV_SLOTS && set->param < AH_ADV_PARAMS)
+                s->param[set->slot][set->param] = set->value;
+        }
+    }
+}
+
 void ah_advanced_apply_preset(AhAdvancedState *s, int preset)
 {
     if (!s)
@@ -643,15 +660,14 @@ void ah_advanced_apply_preset(AhAdvancedState *s, int preset)
         s->preset = 0;
         return;
     }
-    memset(s->on, 0, sizeof(s->on));
-    chain_defaults(s->param);
+    bool keep_ab = s->ab_bypass;
+    bool keep_gm = s->gain_match;
+    int keep_order = s->order;
+    ah_advanced_apply_set(s, k_preset_sets[preset]);
+    s->ab_bypass = keep_ab;
+    s->gain_match = keep_gm;
+    s->order = keep_order;
     s->preset = preset;
-    for (const AhAdvSet *set = k_preset_sets[preset]; set->slot >= 0; ++set) {
-        if (set->param < 0)
-            s->on[set->slot] = true;
-        else
-            s->param[set->slot][set->param] = set->value;
-    }
 }
 
 static int parse_bool(const char *v, bool *out)

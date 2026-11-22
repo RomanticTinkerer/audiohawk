@@ -181,10 +181,19 @@ int ah_core_set_profile(AhCore *core, AhProfileId profile)
 {
     if (!core)
         return -1;
+    const AhProfileDef *def = ah_profile_by_id(profile);
     core->settings.profile = profile;
-    int r = ah_core_apply_listening(core);
+    core->effects = def->fx;
+    ah_effects_clamp(&core->effects);
+    ah_advanced_apply_set(&core->advanced, def->adv);
+    ah_advanced_clamp(&core->advanced);
+    ah_core_apply_listening(core);
+    ++core->profile_serial;
+    int r = ah_core_sync_pipeline(core);
     ah_settings_save(&core->settings);
     ah_eq_state_save(&core->equalizer);
+    ah_effects_save(&core->effects);
+    ah_advanced_save(&core->advanced);
     return r;
 }
 
