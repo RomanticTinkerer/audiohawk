@@ -93,3 +93,7 @@ AudioHawk creates its own virtual audio output using PipeWire.
 When you enable the equalizer, your audio is routed through AudioHawk before reaching your speakers or headphones. This allows AudioHawk to apply your selected sound settings without changing your system's default audio device.
 
 You can close the dashboard without stopping AudioHawk. It continues
+
+## How It's Made
+
+I write long, detailed prompts describing what AudioHawk should do, and Claude (an AI coding assistant) writes most of the code from them. I review, test and ship every release myself.
