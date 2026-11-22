@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 - 2026-11-22
+
+### Added
+- New Study listening profile: low-fatigue curve with gentle mids, soft highs, leveler, gentle compression, crossfeed and de-esser for long focus sessions
+- New Sleep listening profile: dark and soft with rolled-off treble, reduced sub bass, low ceiling limiter, leveler, compression and crossfeed for falling asleep
+
+### Changed
+- Listening profiles now tune basic effects and Advanced settings in addition to the EQ curve. Choosing a profile configures the full sound profile
+- Profile descriptions now use clean punctuation without em dashes
+
 ## 0.4.0 - 2026-11-19
 
 ### Changed
