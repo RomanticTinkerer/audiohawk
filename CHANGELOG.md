@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1b - 2026-11-22
+
+### Added
+- New Classes listening profile: speech-focused curve, dialogue enhancement, leveler, noise reduction, compression, de-esser and mono summing for lectures and online classes
+
 ## 0.4.1 - 2026-11-22
 
 ### Added
