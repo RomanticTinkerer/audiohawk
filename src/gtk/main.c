@@ -33,6 +33,7 @@ typedef struct {
     gboolean quitting;
     gboolean told_background;
     gboolean start_background;
+    unsigned profile_serial;
 } Shell;
 
 static void load_css(void)
@@ -96,6 +97,8 @@ static void load_css(void)
     g_object_unref(provider);
 }
 
+static void build_pages(Shell *shell);
+
 static void set_active_tab(Shell *shell, int index)
 {
     const char *names[AH_TABS] = { "home", "equalizer", "advanced", "settings", "about" };
@@ -110,6 +113,11 @@ static void set_active_tab(Shell *shell, int index)
 
     if (index < 0 || index >= AH_TABS)
         return;
+
+    if (shell->profile_serial != shell->core->profile_serial) {
+        shell->profile_serial = shell->core->profile_serial;
+        build_pages(shell);
+    }
 
     shell->tab = index;
     gtk_stack_set_visible_child_name(shell->stack, names[index]);
@@ -315,6 +323,7 @@ static void on_reset_response(AdwAlertDialog *dialog, const char *response, gpoi
         return;
     const gboolean saved = ah_core_reset(shell->core) == 0;
     build_pages(shell);
+    shell->profile_serial = shell->core->profile_serial;
     set_active_tab(shell, shell->tab);
     adw_toast_overlay_add_toast(shell->toasts,
                                 adw_toast_new(saved ? "Configs reset to defaults"
@@ -481,6 +490,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     shell->stack = GTK_STACK(gtk_stack_new());
     gtk_stack_set_transition_type(shell->stack, GTK_STACK_TRANSITION_TYPE_CROSSFADE);
     build_pages(shell);
+    shell->profile_serial = shell->core->profile_serial;
 
     adw_toolbar_view_set_content(toolbar, GTK_WIDGET(shell->stack));
     adw_toolbar_view_add_bottom_bar(toolbar, make_dock(shell));

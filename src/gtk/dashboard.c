@@ -29,6 +29,8 @@ static const char *profile_icon(AhProfileId id)
     case AH_PROFILE_WORK:   return "work";
     case AH_PROFILE_CASUAL: return "casual";
     case AH_PROFILE_MOOD:   return "mood";
+    case AH_PROFILE_STUDY:  return "study";
+    case AH_PROFILE_SLEEP:  return "sleep";
     }
     return "music";
 }
@@ -71,7 +73,7 @@ static void refresh_banner(Dash *d)
         const AhProfileDef *p = ah_profile_by_id(d->core->settings.profile);
         char buf[256];
         snprintf(buf, sizeof(buf),
-                 "Equalizer on — processing output streams (%s · %s)",
+                 "Equalizer on: processing output streams (%s · %s)",
                  p->name,
                  ah_intel_by_id(d->core->settings.intel)->name);
         adw_banner_set_title(d->banner, buf);
@@ -132,6 +134,11 @@ static void on_profile_activated(AdwActionRow *row, gpointer user_data)
     Dash *d = user_data;
     int id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "profile-id"));
     ah_core_set_profile(d->core, (AhProfileId)id);
+    const AhProfileDef *p = ah_profile_by_id((AhProfileId)id);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "%s applied to EQ, effects and Advanced",
+             p ? p->name : "Profile");
+    toast(d, msg);
     refresh_selection(d);
 }
 
@@ -165,7 +172,7 @@ static void on_manage_activated(AdwActionRow *row, gpointer user_data)
         "Manage App Profiles",
         "Assign listening profiles to individual applications. "
         "Mappings are stored in ~/.config/audiohawk/app_profiles.conf.\n\n"
-        "A full editor page will follow — you can seed a few examples now.");
+        "A full editor page will follow. You can seed a few examples now.");
 
     adw_alert_dialog_add_responses(ADW_ALERT_DIALOG(dialog),
                                    "close", "_Close",
