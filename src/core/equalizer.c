@@ -173,6 +173,7 @@ AhEqPresetId ah_eq_preset_for_profile(AhProfileId profile)
     case AH_PROFILE_MOOD:   return AH_EQ_PRESET_ELECTRONIC;
     case AH_PROFILE_STUDY:  return AH_EQ_PRESET_CLASSICAL;
     case AH_PROFILE_SLEEP:  return AH_EQ_PRESET_LATE_NIGHT;
+    case AH_PROFILE_CLASSES: return AH_EQ_PRESET_VOCAL;
     }
     return AH_EQ_PRESET_FLAT;
 }

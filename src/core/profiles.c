@@ -81,6 +81,17 @@ static const AhAdvSet k_adv_sleep[] = {
     END
 };
 
+static const AhAdvSet k_adv_classes[] = {
+    ON(AH_ADV_DC),
+    ON(AH_ADV_LIMITER),
+    ON(AH_ADV_HIGHPASS), { AH_ADV_HIGHPASS, 0, 95.f }, { AH_ADV_HIGHPASS, 1, 0.71f },
+    ON(AH_ADV_NOISE), { AH_ADV_NOISE, 0, 7.0f }, { AH_ADV_NOISE, 1, 6.0f },
+    ON(AH_ADV_COMPRESSOR), { AH_ADV_COMPRESSOR, 0, -22.f }, { AH_ADV_COMPRESSOR, 1, 2.5f }, { AH_ADV_COMPRESSOR, 5, 2.0f },
+    ON(AH_ADV_DEESSER), { AH_ADV_DEESSER, 0, 5500.f }, { AH_ADV_DEESSER, 1, -30.f }, { AH_ADV_DEESSER, 2, 8.0f },
+    ON(AH_ADV_MONO), { AH_ADV_MONO, 0, 100.f },
+    END
+};
+
 /*
  * Listening profiles — dB targets from common headphone/PC EQ guides
  * (Hearably, Freedom251, Progressive Radio Network gaming/movie/voice charts).
@@ -325,6 +336,36 @@ static const AhProfileDef g_profiles[AH_PROFILE_COUNT] = {
             .pitch = 0
         },
         .adv = k_adv_sleep
+    },
+    {
+        .id = AH_PROFILE_CLASSES,
+        .name = "Classes",
+        .blurb = "Live classes and long lectures: clear, steady speech with background noise cut.",
+        .bands = {
+            {32, 1.1f, -5.0f}, {64, 1.1f, -3.5f}, {125, 1.1f, 0.0f},
+            {250, 1.1f, -1.5f}, {500, 1.1f, -1.0f}, {1000, 1.1f, 1.5f},
+            {2000, 1.1f, 3.0f}, {4000, 1.1f, 3.5f}, {8000, 1.1f, 1.5f},
+            {16000, 1.1f, 0.0f}
+        },
+        .fx = {
+            .bass_enhancer = false,
+            .bass_curve = AH_BASS_CURVE_BALANCED,
+            .bass_level = 50,
+            .mid_enhancer = false,
+            .mid_level = 50,
+            .treble_enhancer = false,
+            .treble_level = 50,
+            .volume_leveler = true,
+            .volume_boost = 100,
+            .surround_virtualizer = false,
+            .surround_amount = 50,
+            .surround_bass = 25,
+            .surround_treble = 25,
+            .dialogue_enhancer = true,
+            .dialogue_strength = 8,
+            .pitch = 0
+        },
+        .adv = k_adv_classes
     }
 };
 

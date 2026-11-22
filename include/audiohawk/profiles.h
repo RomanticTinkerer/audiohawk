@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 #define AH_EQ_BANDS 10
-#define AH_PROFILE_COUNT 8
+#define AH_PROFILE_COUNT 9
 #define AH_INTEL_COUNT 4
 
 typedef enum {
@@ -21,7 +21,8 @@ typedef enum {
     AH_PROFILE_CASUAL,
     AH_PROFILE_MOOD,
     AH_PROFILE_STUDY,
-    AH_PROFILE_SLEEP
+    AH_PROFILE_SLEEP,
+    AH_PROFILE_CLASSES
 } AhProfileId;
 
 typedef enum {

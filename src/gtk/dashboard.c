@@ -31,6 +31,7 @@ static const char *profile_icon(AhProfileId id)
     case AH_PROFILE_MOOD:   return "mood";
     case AH_PROFILE_STUDY:  return "study";
     case AH_PROFILE_SLEEP:  return "sleep";
+    case AH_PROFILE_CLASSES: return "classes";
     }
     return "music";
 }
