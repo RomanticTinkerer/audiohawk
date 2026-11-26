@@ -132,6 +132,8 @@ static void check_every_control(bool verbose)
                 AhAdvancedState s;
                 ah_advanced_defaults(&s);
                 s.on[slot] = true;
+                /* The anchor only acts on what the Space effects added. */
+                s.on[AH_ADV_ROOM] |= slot == AH_ADV_CENTRE_ANCHOR;
                 for (int j = 0; j < count && others > 0; ++j) {
                     const AhAdvParam *q = ah_advanced_param(slot, j);
                     s.param[slot][j] = others == 1 ? q->max : q->min;
@@ -418,6 +420,34 @@ int main(int argc, char **argv)
     ah_advanced_apply_set(&app_test, defs[0].adv);
     CHECK(strcmp(app_test.app_name, "test-app") == 0);
     CHECK(app_test.n_apps == 5);
+
+    /* Centre effects must leave the sides alone, and a full anchor must hand the
+     * centre back exactly as it was before the Space effects. */
+    {
+        static float a[2][SW_N], d[2][SW_N];
+        make_signal();
+        AhAdvancedState cs;
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_FOCUS] = true;
+        cs.param[AH_ADV_CENTRE_FOCUS][1] = 0.f; /* side level 0 dB */
+        sweep_run(&cs, a);
+        cs.on[AH_ADV_CENTRE_FOCUS] = false;
+        cs.on[AH_ADV_CENTRE_PUNCH] = true;
+        sweep_run(&cs, d);
+        for (int i = 0; i < SW_N; ++i) {
+            const float side = sw_x[0][i] - sw_x[1][i];
+            CHECK(fabsf((a[0][i] - a[1][i]) - side) < 1e-4f);
+            CHECK(fabsf((d[0][i] - d[1][i]) - side) < 1e-4f);
+        }
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_ROOM] = true;
+        cs.param[AH_ADV_ROOM][3] = 100.f; /* fully wet, so the tail is loud */
+        cs.on[AH_ADV_CENTRE_ANCHOR] = true;
+        cs.param[AH_ADV_CENTRE_ANCHOR][0] = 100.f;
+        sweep_run(&cs, a);
+        for (int i = 0; i < SW_N; ++i)
+            CHECK(fabsf((a[0][i] + a[1][i]) - (sw_x[0][i] + sw_x[1][i])) < 1e-4f);
+    }
 
     /* Pass -v to print how much each control moves the sound. */
     check_every_control(argc > 1 && strcmp(argv[1], "-v") == 0);

@@ -374,6 +374,24 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         { "split", "Crossover", "Hz", 100, 2000, 10, 300 },
         { "low_width", "Low Width", "%", 0, 200, 5, 60 },
         { "high_width", "High Width", "%", 0, 250, 5, 140 } } },
+    /* The centre (mid) is where vocals, kick, snare and bass sit in a stereo mix. */
+    [AH_ADV_CENTRE_FOCUS] = { "centre_focus", "Centre Focus",
+        "Brings the centre forward: vocals, kick and bass, without touching the sides",
+        "effect-dialogue", "Centre", 0, {
+        { "level", "Centre Level", "dB", -6, 9, 0.5f, 2 },
+        { "side", "Side Level", "dB", -12, 3, 0.5f, 0 },
+        { "presence_freq", "Presence Frequency", "Hz", 800, 5000, 50, 2500 },
+        { "presence", "Centre Presence", "dB", -6, 9, 0.5f, 2 } } },
+    [AH_ADV_CENTRE_PUNCH] = { "centre_punch", "Centre Punch",
+        "Sharpens the hits in the centre, like kick and snare, and leaves the sides alone",
+        "view-curve", "Centre", 0, {
+        { "attack", "Punch", "%", 0, 100, 5, 40 },
+        { "sustain", "Sustain", "%", -100, 100, 5, 0 },
+        { "focus", "Focus Below", "Hz", 60, 2000, 10, 250 } } },
+    [AH_ADV_CENTRE_ANCHOR] = { "centre_anchor", "Centre Anchor",
+        "Keeps reverb, crossfeed and other Space effects out of the centre so it stays dry and solid",
+        "bands", "Centre", 0, {
+        { "amount", "Anchor", "%", 0, 100, 5, 70 } } },
 };
 
 static const char *k_presets[AH_ADV_PRESETS] = {
@@ -391,8 +409,8 @@ static const int k_cleanup[] = {
 };
 static const int k_tone[] = {
     AH_ADV_DYN_BASS, AH_ADV_PSYCHO_BASS, AH_ADV_COMPRESSOR, AH_ADV_MB_COMP,
-    AH_ADV_TRANSIENT, AH_ADV_DYN_EQ, AH_ADV_ADAPT_EQ, AH_ADV_PARAMETRIC,
-    AH_ADV_SPECTRAL, AH_ADV_DYN_TREBLE, AH_ADV_EXCITER, AH_ADV_MB_EXCITER
+    AH_ADV_TRANSIENT, AH_ADV_CENTRE_PUNCH, AH_ADV_DYN_EQ, AH_ADV_ADAPT_EQ,
+    AH_ADV_PARAMETRIC, AH_ADV_CENTRE_FOCUS, AH_ADV_SPECTRAL, AH_ADV_DYN_TREBLE, AH_ADV_EXCITER, AH_ADV_MB_EXCITER
 };
 static const int k_color[] = {
     AH_ADV_ANALOG, AH_ADV_TUBE, AH_ADV_TAPE, AH_ADV_DISTORT, AH_ADV_VINYL,
@@ -1198,6 +1216,15 @@ static void design_drive(float *c, float drive_db)
     c[1] = 1.f / sqrtf(c[0]);
 }
 
+static void design_transient(float *c, uint32_t rate)
+{
+    c[0] = decay_ms(150.f, rate); /* onset detector release */
+    c[1] = tau_coeff(30.f, rate); /* its slow copy */
+    c[2] = decay_ms(60.f, rate);  /* short tail */
+    c[3] = decay_ms(500.f, rate); /* long tail */
+    c[4] = tau_coeff(2.f, rate);  /* gain smoothing */
+}
+
 static void design_slot(AhAdvBank *b, int slot)
 {
     const float *p = b->p[slot];
@@ -1277,11 +1304,19 @@ static void design_slot(AhAdvBank *b, int slot)
         c[5] = tau_coeff(60.f, rate);
         break;
     case AH_ADV_TRANSIENT:
-        c[0] = decay_ms(150.f, rate); /* onset detector release */
-        c[1] = tau_coeff(30.f, rate); /* its slow copy */
-        c[2] = decay_ms(60.f, rate);  /* short tail */
-        c[3] = decay_ms(500.f, rate); /* long tail */
-        c[4] = tau_coeff(2.f, rate);  /* gain smoothing */
+        design_transient(c, rate);
+        break;
+    case AH_ADV_CENTRE_PUNCH:
+        design_transient(c, rate);
+        design_lowpass(&f[0], p[2], 0.707f, rate);
+        break;
+    case AH_ADV_CENTRE_FOCUS:
+        design_peaking(&f[0], p[2], 0.9f, p[3], rate);
+        c[0] = db2lin(p[0]);
+        c[1] = db2lin(p[1]);
+        break;
+    case AH_ADV_CENTRE_ANCHOR:
+        c[0] = p[0] * 0.01f;
         break;
     case AH_ADV_PARAMETRIC:
         for (int k = 0; k < 3; ++k)
@@ -1583,6 +1618,22 @@ static void dyn_band(const AhBq *f, const float *c, AhSlotMem *m, float *x, floa
     EACH_CH x[ch] += band[ch] * g;
 }
 
+/* Onset = a peak detector running ahead of its own smoothed copy.
+ * Tail = a long-release detector sitting above a short-release one.
+ * Both are level ratios, so quiet and loud hits get the same treatment. */
+static float transient_gain(float *pk, const float *c, float det, float attack, float sustain)
+{
+    pk[0] = fmaxf(det, pk[0] * c[0]);
+    pk[1] += c[1] * (pk[0] - pk[1]);
+    pk[2] = fmaxf(det, pk[2] * c[2]);
+    pk[3] = fmaxf(det, pk[3] * c[3]);
+    const float onset = fmaxf(0.f, lin2db(pk[0] + 1e-4f) - lin2db(pk[1] + 1e-4f));
+    const float tail = lin2db(pk[3] + 1e-4f) - lin2db(pk[2] + 1e-4f);
+    const float want = clampf((onset * attack + tail * sustain) * 0.01f, -12.f, 12.f);
+    pk[4] += c[4] * (want - pk[4]);
+    return db2lin(pk[4]);
+}
+
 static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l, float *r)
 {
     if (!b->on[slot])
@@ -1675,21 +1726,26 @@ static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l
         break;
     }
     case AH_ADV_TRANSIENT: {
-        /* Onset = a peak detector running ahead of its own smoothed copy.
-         * Tail = a long-release detector sitting above a short-release one.
-         * Both are level ratios, so quiet and loud hits get the same treatment. */
-        const float det = fmaxf(fabsf(x[0]), fabsf(x[1]));
-        float *pk = m->env;
-        pk[0] = fmaxf(det, pk[0] * c[0]);
-        pk[1] += c[1] * (pk[0] - pk[1]);
-        pk[2] = fmaxf(det, pk[2] * c[2]);
-        pk[3] = fmaxf(det, pk[3] * c[3]);
-        const float onset = fmaxf(0.f, lin2db(pk[0] + 1e-4f) - lin2db(pk[1] + 1e-4f));
-        const float tail = lin2db(pk[3] + 1e-4f) - lin2db(pk[2] + 1e-4f);
-        const float want = clampf((onset * p[0] + tail * p[1]) * 0.01f, -12.f, 12.f);
-        pk[4] += c[4] * (want - pk[4]);
-        const float g = db2lin(pk[4]);
+        const float g = transient_gain(m->env, c, fmaxf(fabsf(x[0]), fabsf(x[1])), p[0], p[1]);
         EACH_CH x[ch] *= g;
+        break;
+    }
+    case AH_ADV_CENTRE_PUNCH: {
+        /* Only the centre below the focus frequency is shaped. The rest of the
+         * centre and all of the sides pass through untouched. */
+        const float mid = 0.5f * (x[0] + x[1]);
+        const float side = 0.5f * (x[0] - x[1]);
+        const float lo = bq_run(&f[0], &m->z[0][0], mid);
+        const float out = mid + lo * (transient_gain(m->env, c, fabsf(lo), p[0], p[1]) - 1.f);
+        x[0] = out + side;
+        x[1] = out - side;
+        break;
+    }
+    case AH_ADV_CENTRE_FOCUS: {
+        const float mid = bq_run(&f[0], &m->z[0][0], 0.5f * (x[0] + x[1])) * c[0];
+        const float side = 0.5f * (x[0] - x[1]) * c[1];
+        x[0] = mid + side;
+        x[1] = mid - side;
         break;
     }
     case AH_ADV_PARAMETRIC:
@@ -1936,8 +1992,17 @@ static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l
 static void run_group(AhAdvancedEngine *e, const AhAdvBank *b,
                       const int *ids, int n, float *l, float *r)
 {
+    const float dry_mid = 0.5f * (*l + *r);
     for (int i = 0; i < n; ++i)
         run_slot(e, b, ids[i], l, r);
+    /* Centre Anchor: pull the centre back toward what it was before the Space
+     * effects. Moving both channels by the same amount changes only the mid,
+     * so the width and reverb they added to the sides stay. */
+    if (ids == k_space && b->on[AH_ADV_CENTRE_ANCHOR]) {
+        const float fix = b->c[AH_ADV_CENTRE_ANCHOR][0] * (dry_mid - 0.5f * (*l + *r));
+        *l += fix;
+        *r += fix;
+    }
 }
 
 static void run_chain(AhAdvancedEngine *e, const AhAdvBank *b, float *l, float *r)

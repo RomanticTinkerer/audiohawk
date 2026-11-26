@@ -412,7 +412,7 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
     gtk_box_append(GTK_BOX(box), switcher);
 
     static const char *enhance_groups[] = {
-        "Tone", "Dynamics", "Loudness", "Stereo", "Cleanup", "Check", NULL
+        "Centre", "Tone", "Dynamics", "Loudness", "Stereo", "Cleanup", "Check", NULL
     };
     static const char *fun_groups[] = {
         "Character", "Space", "Tone", NULL

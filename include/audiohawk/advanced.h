@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AH_ADV_SLOTS 39
+#define AH_ADV_SLOTS 42
 #define AH_ADV_PARAMS 9 /* most controls any one effect has */
 #define AH_ADV_SPEC 16
 #define AH_ADV_APPS 8
@@ -62,7 +62,10 @@ typedef enum {
     AH_ADV_SPEC_GATE,
     AH_ADV_DYN_EQ,
     AH_ADV_ADAPT_EQ,
-    AH_ADV_FD_WIDTH
+    AH_ADV_FD_WIDTH,
+    AH_ADV_CENTRE_FOCUS,
+    AH_ADV_CENTRE_PUNCH,
+    AH_ADV_CENTRE_ANCHOR
 } AhAdvSlot;
 
 /* One tunable control of an effect, in real units. */
