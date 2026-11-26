@@ -13,7 +13,7 @@ AudioHawk is a PipeWire-based audio equalizer and listening-profile manager, bui
 - **Device Memory:** Remember your application audio preferences for different output devices.
 - **System Pitch:** Adjust the pitch of routed system audio by up to 15 semitones in either direction.
 - **Virtual Surround:** Add a wider, more spatial sound to ordinary stereo audio.
-- **Centre Focus:** Bring vocals, kick and bass forward, add punch to the centre, and keep reverb and width from smearing it.
+- **Centre Effects:** Seven effects that work only on the centre of the mix, where vocals, kick and bass live. Bring it forward, add punch or density, lift only what both ears share, let the voice duck the sides, re-centre a lopsided master, and keep reverb from smearing it.
 - **Automatic Recovery:** AudioHawk reconnects and restores your audio setup after your computer wakes from sleep.
 - **Startup Support:** Start AudioHawk automatically when you log in.
 - **Persistent Settings:** Your preferences are saved between sessions.
