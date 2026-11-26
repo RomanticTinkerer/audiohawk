@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.5 - 2026-11-26
+
+More for the centre. The Centre tab grows from three effects to seven, and each new one works in its own way.
+
+### Added
+- Centre Priority: the sides dip only while the centre is busy, so a voice cuts through busy music or film effects. The centre itself is never touched. You pick the key frequency, threshold, how far the sides duck and how fast they come back
+- Centre Density: parallel (New York) compression on the centre only. A squashed copy of the centre is blended under the dry one, so vocals get thicker and the middle feels fuller, while transients and the sides stay as they were
+- Centre Lock: listens for sound that both ears truly share, in three bands, and lifts only that. A centred vocal gets the boost, while a guitar panned hard left adds to the centre but has nothing in common with the right ear, so it's left alone. Strictness sets how alike the two ears have to be
+- Centre Balance: learns the left and right level of centred sound and slowly eases the image back to the middle. Useful for lopsided masters and headphones where one side is a bit louder. It also has a manual trim
+
+### Changed
+- The Centre tab now has two groups: Image (Focus, Lock, Balance, Priority, Anchor) and Impact (Punch, Density)
+- Music adds Centre Lock and Centre Density, Movie/Video adds Centre Priority and Centre Lock, Mood adds Centre Density, and Casual and Study add Centre Balance. Game leaves the sides alone on purpose, since that's where footsteps are
+
 ## 0.5.0b - 2026-11-26
 
 ### Changed
