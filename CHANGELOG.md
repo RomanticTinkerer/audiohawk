@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0b - 2026-11-26
+
+### Changed
+- The Advanced tab bar is sorted by what each effect does, and every setting lives in exactly one tab: Centre, Tone, Dynamics, Space, Character, Cleanup, Chain and Monitor. Before, groups like Tone, Dynamics, Cleanup and Space were split across Enhancement, Fun and Processing
+- Inside each tab the effects sit in small groups (for example Bass, Presence and Air, and Equalizer under Tone)
+- Chain presets, processing order, A/B comparison and per-app chains moved to their own Chain tab, so Monitor now only shows the meters and the spectrum
+- The tab bar scrolls sideways on narrow windows instead of getting cut off
+
 ## 0.5.0 - 2026-11-26
 
 The Centre Focus Update. The last few releases spent a lot of time on stereo width, and the centre got left behind. That's where a mix keeps its vocals, kick, snare and bass, so this release gives it some love.
