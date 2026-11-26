@@ -8,12 +8,75 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *const k_tab_titles[3] = { "Enhancement", "Fun", "Processing" };
+static const struct {
+    const char *title;
+    const char *id;
+    struct {
+        const char *name;
+        int slots[6];
+        int n;
+    } groups[3];
+    int n_groups;
+} k_tabs[6] = {
+    {
+        .title = "Centre",
+        .id = "centre",
+        .groups = {
+            { "Centre", { AH_ADV_CENTRE_FOCUS, AH_ADV_CENTRE_PUNCH, AH_ADV_CENTRE_ANCHOR }, 3 },
+        },
+        .n_groups = 1,
+    },
+    {
+        .title = "Tone",
+        .id = "tone",
+        .groups = {
+            { "Bass", { AH_ADV_DYN_BASS, AH_ADV_PSYCHO_BASS }, 2 },
+            { "Presence and Air", { AH_ADV_EXCITER, AH_ADV_SPECTRAL, AH_ADV_MB_EXCITER, AH_ADV_DYN_TREBLE }, 4 },
+            { "Equalizer", { AH_ADV_PARAMETRIC, AH_ADV_DYN_EQ, AH_ADV_ADAPT_EQ }, 3 },
+        },
+        .n_groups = 3,
+    },
+    {
+        .title = "Dynamics",
+        .id = "dynamics",
+        .groups = {
+            { "Compression", { AH_ADV_COMPRESSOR, AH_ADV_MB_COMP, AH_ADV_TRANSIENT }, 3 },
+            { "Loudness", { AH_ADV_AGC, AH_ADV_LOUDNESS, AH_ADV_HEADROOM, AH_ADV_LIMITER }, 4 },
+        },
+        .n_groups = 2,
+    },
+    {
+        .title = "Space",
+        .id = "space",
+        .groups = {
+            { "Stereo", { AH_ADV_STEREO_IMAGE, AH_ADV_WIDEN, AH_ADV_FD_WIDTH, AH_ADV_CROSSFEED, AH_ADV_MONO }, 5 },
+            { "Room and 3D", { AH_ADV_SPEAKERS, AH_ADV_SPATIAL3D, AH_ADV_ROOM, AH_ADV_HALL, AH_ADV_CONVOLVE }, 5 },
+        },
+        .n_groups = 2,
+    },
+    {
+        .title = "Character",
+        .id = "character",
+        .groups = {
+            { "Warmth", { AH_ADV_ANALOG, AH_ADV_VINTAGE, AH_ADV_TUBE, AH_ADV_TAPE }, 4 },
+            { "Lo-Fi and Grit", { AH_ADV_VINYL, AH_ADV_DISTORT, AH_ADV_LOFI }, 3 },
+        },
+        .n_groups = 2,
+    },
+    {
+        .title = "Cleanup",
+        .id = "cleanup",
+        .groups = {
+            { "Cleanup", { AH_ADV_DC, AH_ADV_HIGHPASS, AH_ADV_NOISE, AH_ADV_SPEC_GATE, AH_ADV_RES_TAMER, AH_ADV_DEESSER }, 6 },
+        },
+        .n_groups = 1,
+    },
+};
 
 typedef struct {
     AhCore *core;
     GtkWidget *root;
-    GtkStackPage *tabs[3];
+    GtkStackPage *tabs[6];
     GtkWidget *spec;
     GtkWidget *clip_lab;
     GtkWidget *cpu_lab;
@@ -59,19 +122,22 @@ static void scroll_page_instead(GtkWidget *w)
 
 static void refresh_sensitivity(AdvPage *p)
 {
-    int active[3] = { 0, 0, 0 };
-    for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-        if (adw_expander_row_get_enable_expansion(p->row[i]))
-            active[ah_advanced_slot_tab(i)]++;
-    }
     gtk_widget_set_sensitive(GTK_WIDGET(p->app), adw_switch_row_get_active(p->per_app));
 
-    for (int t = 0; t < 3; ++t) {
+    for (int t = 0; t < 6; ++t) {
+        int active = 0;
+        for (int g = 0; g < k_tabs[t].n_groups; ++g) {
+            for (int s = 0; s < k_tabs[t].groups[g].n; ++s) {
+                int slot = k_tabs[t].groups[g].slots[s];
+                if (adw_expander_row_get_enable_expansion(p->row[slot]))
+                    active++;
+            }
+        }
         char title[32];
-        if (active[t])
-            snprintf(title, sizeof(title), "%s (%d)", k_tab_titles[t], active[t]);
+        if (active)
+            snprintf(title, sizeof(title), "%s (%d)", k_tabs[t].title, active);
         else
-            snprintf(title, sizeof(title), "%s", k_tab_titles[t]);
+            snprintf(title, sizeof(title), "%s", k_tabs[t].title);
         gtk_stack_page_set_title(p->tabs[t], title);
     }
 }
@@ -359,39 +425,6 @@ static void add_slot_row(AdvPage *p, AdwPreferencesGroup *g, int slot)
     g_signal_connect(row, "notify::enable-expansion", G_CALLBACK(on_switch), p);
 }
 
-static AdwPreferencesPage *make_slot_page(AdvPage *p, int tab, const char *title,
-                                         const char *const *order)
-{
-
-    AdwPreferencesPage *page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
-    adw_preferences_page_set_title(page, title);
-
-    for (int g = 0; order[g]; ++g) {
-        gboolean any = FALSE;
-        for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-            if (ah_advanced_slot_tab(i) == tab &&
-                strcmp(ah_advanced_slot_group(i), order[g]) == 0) {
-                any = TRUE;
-                break;
-            }
-        }
-        if (!any)
-            continue;
-
-        AdwPreferencesGroup *grp = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
-        adw_preferences_group_set_title(grp, order[g]);
-        for (int i = 0; i < AH_ADV_SLOTS; ++i) {
-            if (ah_advanced_slot_tab(i) != tab)
-                continue;
-            if (strcmp(ah_advanced_slot_group(i), order[g]) != 0)
-                continue;
-            add_slot_row(p, grp, i);
-        }
-        adw_preferences_page_add(page, grp);
-    }
-    return page;
-}
-
 GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
 {
     (void)toasts;
@@ -409,30 +442,41 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
     gtk_widget_set_halign(switcher, GTK_ALIGN_CENTER);
     gtk_widget_set_margin_top(switcher, 8);
     gtk_widget_set_margin_bottom(switcher, 4);
-    gtk_box_append(GTK_BOX(box), switcher);
 
-    static const char *enhance_groups[] = {
-        "Centre", "Tone", "Dynamics", "Loudness", "Stereo", "Cleanup", "Check", NULL
-    };
-    static const char *fun_groups[] = {
-        "Character", "Space", "Tone", NULL
-    };
-    static const char *process_groups[] = {
-        "Equalizer", "Dynamics", "Cleanup", "Space", NULL
-    };
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
+    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), switcher);
+    gtk_box_append(GTK_BOX(box), scroll);
 
-    p->tabs[0] = gtk_stack_add_titled(
-        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 0, k_tab_titles[0], enhance_groups)),
-        "enhance", k_tab_titles[0]);
-    p->tabs[1] = gtk_stack_add_titled(
-        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 1, k_tab_titles[1], fun_groups)),
-        "fun", k_tab_titles[1]);
-    p->tabs[2] = gtk_stack_add_titled(
-        GTK_STACK(stack), GTK_WIDGET(make_slot_page(p, 2, k_tab_titles[2], process_groups)),
-        "process", k_tab_titles[2]);
+    int seen[AH_ADV_SLOTS] = { 0 };
+    int total_placed = 0;
+    for (int t = 0; t < 6; ++t) {
+        AdwPreferencesPage *page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
+        adw_preferences_page_set_title(page, k_tabs[t].title);
+        for (int g = 0; g < k_tabs[t].n_groups; ++g) {
+            AdwPreferencesGroup *grp = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+            adw_preferences_group_set_title(grp, k_tabs[t].groups[g].name);
+            for (int s = 0; s < k_tabs[t].groups[g].n; ++s) {
+                int slot = k_tabs[t].groups[g].slots[s];
+                if (slot >= 0 && slot < AH_ADV_SLOTS) {
+                    seen[slot]++;
+                    total_placed++;
+                }
+                add_slot_row(p, grp, slot);
+            }
+            adw_preferences_page_add(page, grp);
+        }
+        p->tabs[t] = gtk_stack_add_titled(
+            GTK_STACK(stack), GTK_WIDGET(page), k_tabs[t].id, k_tabs[t].title);
+    }
+    g_warn_if_fail(total_placed == AH_ADV_SLOTS);
+    for (int i = 0; i < AH_ADV_SLOTS; ++i)
+        g_warn_if_fail(seen[i] == 1);
 
-    AdwPreferencesPage *mon = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
-    adw_preferences_page_set_title(mon, "Monitor");
+    AdwPreferencesPage *chain_page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
+    adw_preferences_page_set_title(chain_page, "Chain");
 
     AdwPreferencesGroup *compare = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
     adw_preferences_group_set_title(compare, "Comparison");
@@ -450,7 +494,54 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
     adw_action_row_set_subtitle(ADW_ACTION_ROW(p->gain_match),
                                 "Match wet loudness to the dry signal");
     adw_preferences_group_add(compare, GTK_WIDGET(p->gain_match));
-    adw_preferences_page_add(mon, compare);
+    adw_preferences_page_add(chain_page, compare);
+
+    AdwPreferencesGroup *chain = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+    adw_preferences_group_set_title(chain, "Effect chains");
+
+    p->preset = ADW_COMBO_ROW(adw_combo_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->preset), "Chain Preset");
+    GtkStringList *presets = gtk_string_list_new(NULL);
+    for (int i = 0; i < AH_ADV_PRESETS; ++i)
+        gtk_string_list_append(presets, ah_advanced_preset_name(i));
+    adw_combo_row_set_model(p->preset, G_LIST_MODEL(presets));
+    adw_preferences_group_add(chain, GTK_WIDGET(p->preset));
+
+    p->order = ADW_COMBO_ROW(adw_combo_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->order), "Processing Order");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(p->order),
+                                "Cleanup first, then these blocks, then limiter");
+    GtkStringList *orders = gtk_string_list_new(NULL);
+    for (int i = 0; i < AH_ADV_ORDERS; ++i)
+        gtk_string_list_append(orders, ah_advanced_order_name(i));
+    adw_combo_row_set_model(p->order, G_LIST_MODEL(orders));
+    adw_preferences_group_add(chain, GTK_WIDGET(p->order));
+    adw_preferences_page_add(chain_page, chain);
+
+    AdwPreferencesGroup *apps_g = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
+    adw_preferences_group_set_title(apps_g, "Per application");
+
+    p->per_app = ADW_SWITCH_ROW(adw_switch_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->per_app), "Per-Application Effect Chains");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(p->per_app),
+                                "Keep a separate Advanced chain per named app");
+    adw_preferences_group_add(apps_g, GTK_WIDGET(p->per_app));
+
+    p->app = ADW_COMBO_ROW(adw_combo_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->app), "Active app chain");
+    GtkStringList *apps = gtk_string_list_new(NULL);
+    for (int i = 0; i < core->advanced.n_apps; ++i)
+        gtk_string_list_append(apps, core->advanced.apps[i].name);
+    if (core->advanced.n_apps == 0)
+        gtk_string_list_append(apps, "default");
+    adw_combo_row_set_model(p->app, G_LIST_MODEL(apps));
+    adw_preferences_group_add(apps_g, GTK_WIDGET(p->app));
+    adw_preferences_page_add(chain_page, apps_g);
+
+    gtk_stack_add_titled(GTK_STACK(stack), GTK_WIDGET(chain_page), "chain", "Chain");
+
+    AdwPreferencesPage *mon = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
+    adw_preferences_page_set_title(mon, "Monitor");
 
     AdwPreferencesGroup *meters = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
     adw_preferences_group_set_title(meters, "Meters");
@@ -489,48 +580,6 @@ GtkWidget *ah_gtk_advanced_page_new(AhCore *core, AdwToastOverlay *toasts)
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(p->spec), draw_spec, p, NULL);
     adw_preferences_group_add(spec_g, p->spec);
     adw_preferences_page_add(mon, spec_g);
-
-    AdwPreferencesGroup *chain = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
-    adw_preferences_group_set_title(chain, "Effect chains");
-
-    p->preset = ADW_COMBO_ROW(adw_combo_row_new());
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->preset), "Chain Preset");
-    GtkStringList *presets = gtk_string_list_new(NULL);
-    for (int i = 0; i < AH_ADV_PRESETS; ++i)
-        gtk_string_list_append(presets, ah_advanced_preset_name(i));
-    adw_combo_row_set_model(p->preset, G_LIST_MODEL(presets));
-    adw_preferences_group_add(chain, GTK_WIDGET(p->preset));
-
-    p->order = ADW_COMBO_ROW(adw_combo_row_new());
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->order), "Processing Order");
-    adw_action_row_set_subtitle(ADW_ACTION_ROW(p->order),
-                                "Cleanup first, then these blocks, then limiter");
-    GtkStringList *orders = gtk_string_list_new(NULL);
-    for (int i = 0; i < AH_ADV_ORDERS; ++i)
-        gtk_string_list_append(orders, ah_advanced_order_name(i));
-    adw_combo_row_set_model(p->order, G_LIST_MODEL(orders));
-    adw_preferences_group_add(chain, GTK_WIDGET(p->order));
-    adw_preferences_page_add(mon, chain);
-
-    AdwPreferencesGroup *apps_g = ADW_PREFERENCES_GROUP(adw_preferences_group_new());
-    adw_preferences_group_set_title(apps_g, "Per application");
-
-    p->per_app = ADW_SWITCH_ROW(adw_switch_row_new());
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->per_app), "Per-Application Effect Chains");
-    adw_action_row_set_subtitle(ADW_ACTION_ROW(p->per_app),
-                                "Keep a separate Advanced chain per named app");
-    adw_preferences_group_add(apps_g, GTK_WIDGET(p->per_app));
-
-    p->app = ADW_COMBO_ROW(adw_combo_row_new());
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(p->app), "Active app chain");
-    GtkStringList *apps = gtk_string_list_new(NULL);
-    for (int i = 0; i < core->advanced.n_apps; ++i)
-        gtk_string_list_append(apps, core->advanced.apps[i].name);
-    if (core->advanced.n_apps == 0)
-        gtk_string_list_append(apps, "default");
-    adw_combo_row_set_model(p->app, G_LIST_MODEL(apps));
-    adw_preferences_group_add(apps_g, GTK_WIDGET(p->app));
-    adw_preferences_page_add(mon, apps_g);
 
     gtk_stack_add_titled(GTK_STACK(stack), GTK_WIDGET(mon), "monitor", "Monitor");
     gtk_widget_set_vexpand(stack, TRUE);

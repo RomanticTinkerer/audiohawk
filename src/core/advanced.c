@@ -116,8 +116,6 @@ typedef struct {
     const char *title;
     const char *blurb;
     const char *icon;
-    const char *group;
-    int tab;
     AhAdvParam p[AH_ADV_PARAMS]; /* { key, label, unit, min, max, step, default } */
 } AhAdvMeta;
 
@@ -125,14 +123,14 @@ typedef struct {
 static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
     [AH_ADV_DYN_BASS] = { "dyn_bass", "Dynamic Bass Enhancement",
         "Lifts the low band and adds harmonics, only while bass is playing",
-        "effect-bass", "Tone", 0, {
+        "effect-bass", {
         { "freq", "Frequency", "Hz", 40, 200, 5, 90 },
         { "boost", "Boost", "dB", 0, 12, 0.5f, 4 },
         { "harmonics", "Harmonics", "%", 0, 100, 5, 30 },
         { "threshold", "Threshold", "dB", -60, -10, 1, -40 } } },
     [AH_ADV_COMPRESSOR] = { "compressor", "Dynamic Range Compressor",
         "Soft-knee RMS compressor. Both channels move together",
-        "effect-leveler", "Dynamics", 0, {
+        "effect-leveler", {
         { "threshold", "Threshold", "dB", -60, 0, 0.5f, -18 },
         { "ratio", "Ratio", ":1", 1, 20, 0.1f, 3 },
         { "attack", "Attack", "ms", 0.1f, 200, 0.1f, 20 },
@@ -141,180 +139,180 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         { "makeup", "Makeup Gain", "dB", 0, 24, 0.5f, 3 } } },
     [AH_ADV_STEREO_IMAGE] = { "stereo_image", "Stereo Image Enhancer",
         "Mid/side width with the bass folded to mono",
-        "effect-surround", "Stereo", 0, {
+        "effect-surround", {
         { "width", "Width", "%", 0, 200, 5, 120 },
         { "mono_below", "Mono Bass Below", "Hz", 20, 300, 5, 100 } } },
     [AH_ADV_EXCITER] = { "exciter", "Harmonic Exciter",
         "Saturates the band above the frequency and mixes it back for air",
-        "effect-treble", "Tone", 0, {
+        "effect-treble", {
         { "freq", "Frequency", "Hz", 1000, 10000, 100, 3500 },
         { "drive", "Drive", "dB", 0, 24, 0.5f, 8 },
         { "mix", "Mix", "%", 0, 100, 1, 20 } } },
     [AH_ADV_CROSSFEED] = { "crossfeed", "Headphone Crossfeed",
         "Bleeds a low-passed copy of each side into the other ear (Bauer bs2b)",
-        "effect-surround", "Stereo", 0, {
+        "effect-surround", {
         { "cutoff", "Cutoff", "Hz", 300, 2000, 10, 700 },
         { "feed", "Feed", "dB", 1, 15, 0.5f, 4.5f } } },
     [AH_ADV_RES_TAMER] = { "res_tamer", "Resonance Tamer",
         "Dips one narrow band, only while it is loud",
-        "effect-mid", "Cleanup", 0, {
+        "effect-mid", {
         { "freq", "Frequency", "Hz", 1000, 8000, 50, 3200 },
         { "q", "Q", "", 0.5f, 8, 0.1f, 2.4f },
         { "threshold", "Threshold", "dB", -60, 0, 0.5f, -30 },
         { "max_cut", "Max Cut", "dB", 0, 18, 0.5f, 6 } } },
     [AH_ADV_LIMITER] = { "limiter", "True Peak Limiter",
         "2 ms lookahead brickwall, catches inter-sample peaks",
-        "volume-boost", "Loudness", 0, {
+        "volume-boost", {
         { "gain", "Input Gain", "dB", 0, 18, 0.5f, 0 },
         { "ceiling", "Ceiling", "dB", -12, 0, 0.1f, -1 },
         { "release", "Release", "ms", 10, 1000, 10, 40 } } },
     [AH_ADV_AGC] = { "agc", "Automatic Gain Compensation",
         "Rides the volume toward a target level, holds through silence",
-        "effect-leveler", "Loudness", 0, {
+        "effect-leveler", {
         { "target", "Target Level", "dB", -36, -6, 0.5f, -18 },
         { "max_boost", "Max Boost", "dB", 0, 24, 0.5f, 9 },
         { "max_cut", "Max Cut", "dB", 0, 24, 0.5f, 9 },
         { "speed", "Speed", "ms", 50, 5000, 50, 400 } } },
     [AH_ADV_DC] = { "dc_remove", "DC Offset Removal",
         "Removes any constant offset with a gentle high-pass below hearing",
-        "flat", "Cleanup", 0, {
+        "flat", {
         { "cutoff", "Cutoff", "Hz", 2, 30, 1, 10 } } },
     [AH_ADV_NOISE] = { "noise_reduce", "Adaptive Noise Reduction",
         "Learns the hiss level in three bands and turns down what sits near it",
-        "work", "Cleanup", 0, {
+        "work", {
         { "reduction", "Reduction", "dB", 0, 30, 0.5f, 12 },
         { "sensitivity", "Sensitivity", "dB", 0, 24, 0.5f, 6 },
         { "release", "Release", "ms", 20, 1000, 10, 150 } } },
     [AH_ADV_HIGHPASS] = { "highpass", "High-Pass Filter",
         "12 dB/octave rumble cut",
-        "bass", "Cleanup", 0, {
+        "bass", {
         { "cutoff", "Cutoff", "Hz", 20, 300, 5, 40 },
         { "q", "Resonance", "Q", 0.5f, 2, 0.01f, 0.71f } } },
     [AH_ADV_HEADROOM] = { "headroom", "Output Headroom Control",
         "Plain gain trim before the limiter",
-        "volume-boost", "Loudness", 0, {
+        "volume-boost", {
         { "trim", "Trim", "dB", -12, 0, 0.1f, -3 } } },
     [AH_ADV_MONO] = { "mono_check", "Mono Compatibility Checker",
         "Folds toward mono so you can hear what a single speaker would play",
-        "bands", "Check", 0, {
+        "bands", {
         { "mix", "Mono Mix", "%", 0, 100, 5, 100 } } },
     [AH_ADV_SPECTRAL] = { "spectral", "Spectral Enhancement",
         "Presence bell plus an air shelf",
-        "treble", "Tone", 0, {
+        "treble", {
         { "presence_freq", "Presence Frequency", "Hz", 1000, 6000, 50, 2800 },
         { "presence", "Presence", "dB", -6, 6, 0.5f, 2 },
         { "air_freq", "Air Frequency", "Hz", 6000, 16000, 100, 9000 },
         { "air", "Air", "dB", -6, 6, 0.5f, 2 } } },
     [AH_ADV_LOUDNESS] = { "loudness", "Intelligent Loudness Normalization",
         "Measures loudness the broadcast way (BS.1770) and steers it to a LUFS target",
-        "effect-leveler", "Loudness", 0, {
+        "effect-leveler", {
         { "target", "Target", "LUFS", -30, -10, 0.5f, -18 },
         { "max_boost", "Max Boost", "dB", 0, 20, 0.5f, 10 },
         { "max_cut", "Max Cut", "dB", 0, 20, 0.5f, 10 },
         { "window", "Window", "ms", 400, 5000, 100, 3000 } } },
     [AH_ADV_ANALOG] = { "analog", "Analog Warmth",
         "A low-end lift into soft, slightly uneven saturation",
-        "intel-warm", "Character", 1, {
+        "intel-warm", {
         { "drive", "Drive", "dB", 0, 18, 0.5f, 4 },
         { "warmth", "Warmth", "dB", 0, 6, 0.5f, 1.5f },
         { "mix", "Mix", "%", 0, 100, 1, 50 } } },
     [AH_ADV_VINTAGE] = { "vintage", "Vintage Hi-Fi",
         "Loudness-button shelves plus gentle saturation",
-        "mood", "Character", 1, {
+        "mood", {
         { "bass", "Bass", "dB", 0, 8, 0.5f, 3 },
         { "treble", "Treble", "dB", 0, 8, 0.5f, 2.5f },
         { "saturation", "Saturation", "%", 0, 100, 5, 30 } } },
     [AH_ADV_ROOM] = { "room", "Room Simulator",
         "Small-room reverb. Decay is the time the tail takes to fade by 60 dB",
-        "movie", "Space", 1, {
+        "movie", {
         { "size", "Size", "%", 50, 150, 5, 100 },
         { "decay", "Decay", "s", 0.1f, 2, 0.05f, 0.5f },
         { "high_cut", "High Cut", "Hz", 500, 16000, 100, 4000 },
         { "wet", "Wet", "%", 0, 100, 1, 10 } } },
     [AH_ADV_HALL] = { "hall", "Concert Hall Reverb",
         "Large-hall reverb. Decay is the time the tail takes to fade by 60 dB",
-        "movie", "Space", 1, {
+        "movie", {
         { "size", "Size", "%", 50, 150, 5, 100 },
         { "decay", "Decay", "s", 0.5f, 8, 0.1f, 1.8f },
         { "high_cut", "High Cut", "Hz", 500, 16000, 100, 3000 },
         { "wet", "Wet", "%", 0, 100, 1, 15 } } },
     [AH_ADV_WIDEN] = { "widen", "Stereo Widening",
         "Raises the side signal and can pull the center back",
-        "effect-surround", "Space", 1, {
+        "effect-surround", {
         { "width", "Width", "%", 100, 300, 5, 150 },
         { "center", "Center", "dB", -6, 0, 0.5f, 0 } } },
     [AH_ADV_SPEAKERS] = { "speakers", "Virtual Speaker Placement",
         "Each ear also hears the far speaker, later and duller, as in a room",
-        "effect-surround", "Space", 1, {
+        "effect-surround", {
         { "angle", "Speaker Angle", "deg", 10, 60, 1, 30 },
         { "level", "Far-Ear Level", "dB", -24, -3, 0.5f, -10 },
         { "shadow", "Head Shadow", "Hz", 500, 8000, 100, 2000 } } },
     [AH_ADV_TAPE] = { "tape", "Tape Saturation",
         "Saturation, real pitch wow, hiss and a head-gap rolloff",
-        "intel-warm", "Character", 1, {
+        "intel-warm", {
         { "drive", "Drive", "dB", 0, 18, 0.5f, 4 },
         { "wow", "Wow", "%", 0, 0.5f, 0.01f, 0.15f },
         { "hiss", "Hiss", "dB", -96, -50, 1, -72 },
         { "rolloff", "Rolloff", "Hz", 4000, 20000, 500, 12000 } } },
     [AH_ADV_TUBE] = { "tube", "Tube Amplifier Emulation",
         "Tube-style soft clipping. More bias adds more even harmonics",
-        "intel-warm", "Character", 1, {
+        "intel-warm", {
         { "drive", "Drive", "dB", 0, 24, 0.5f, 6 },
         { "bias", "Bias", "%", 0, 100, 5, 40 },
         { "mix", "Mix", "%", 0, 100, 1, 100 } } },
     [AH_ADV_VINYL] = { "vinyl", "Vinyl Simulation",
         "Crackle, turntable rumble and a worn top end",
-        "mood", "Character", 1, {
+        "mood", {
         { "crackle", "Crackle", "%", 0, 100, 5, 30 },
         { "rumble", "Rumble", "%", 0, 100, 5, 20 },
         { "wear", "Wear", "%", 0, 100, 5, 30 } } },
     [AH_ADV_SPATIAL3D] = { "spatial3d", "3D Spatial Audio",
         "Binaural-style width and room, with its own tone lift",
-        "effect-surround", "Space", 1, {
+        "effect-surround", {
         { "strength", "Strength", "%", 0, 100, 5, 40 },
         { "bass", "Bass Lift", "%", 0, 100, 5, 20 },
         { "treble", "Treble Lift", "%", 0, 100, 5, 20 } } },
     [AH_ADV_PSYCHO_BASS] = { "psycho_bass", "Psychoacoustic Bass Boost",
         "Adds harmonics of the low band so small speakers hint at bass they can't play",
-        "effect-bass", "Tone", 1, {
+        "effect-bass", {
         { "freq", "Frequency", "Hz", 40, 200, 5, 90 },
         { "drive", "Drive", "dB", 0, 24, 0.5f, 12 },
         { "harmonics", "Harmonics", "%", 0, 100, 5, 40 } } },
     [AH_ADV_DISTORT] = { "distort", "Harmonic Distortion",
         "Heavy anti-aliased overdrive with a tone filter",
-        "effect-mid", "Character", 1, {
+        "effect-mid", {
         { "drive", "Drive", "dB", 0, 36, 0.5f, 12 },
         { "tone", "Tone", "Hz", 1000, 20000, 100, 8000 },
         { "output", "Output", "dB", -24, 0, 0.5f, -6 },
         { "mix", "Mix", "%", 0, 100, 1, 100 } } },
     [AH_ADV_MB_EXCITER] = { "mb_exciter", "Multi-band Exciter",
         "Separate saturation for the mids (200 Hz to 2.5 kHz) and the highs",
-        "effect-treble", "Tone", 1, {
+        "effect-treble", {
         { "mid_drive", "Mid Drive", "dB", 0, 24, 0.5f, 6 },
         { "mid_mix", "Mid Mix", "%", 0, 100, 1, 30 },
         { "high_drive", "High Drive", "dB", 0, 24, 0.5f, 9 },
         { "high_mix", "High Mix", "%", 0, 100, 1, 40 } } },
     [AH_ADV_DYN_TREBLE] = { "dyn_treble", "Dynamic Treble Enhancement",
         "Boosts the top only while it is above the threshold, so hiss stays down",
-        "treble", "Tone", 1, {
+        "treble", {
         { "freq", "Frequency", "Hz", 3000, 12000, 100, 6000 },
         { "boost", "Boost", "dB", 0, 12, 0.5f, 4 },
         { "threshold", "Threshold", "dB", -60, -20, 1, -45 } } },
     [AH_ADV_LOFI] = { "lofi", "Lo-Fi Mode",
         "Bit crusher, sample-rate reducer and a dulling low-pass",
-        "casual", "Character", 1, {
+        "casual", {
         { "bits", "Bit Depth", "bit", 4, 16, 1, 8 },
         { "rate", "Sample Rate", "Hz", 2000, 48000, 500, 12000 },
         { "tone", "Tone", "Hz", 1000, 16000, 100, 6000 } } },
     [AH_ADV_CONVOLVE] = { "convolve", "Convolution Reverb",
         "Convolves with a generated burst of early reflections",
-        "movie", "Space", 2, {
+        "movie", {
         { "size", "Size", "ms", 2, 20, 0.5f, 8 },
         { "diffusion", "Diffusion", "%", 0, 100, 5, 60 },
         { "wet", "Wet", "%", 0, 100, 1, 25 } } },
     [AH_ADV_PARAMETRIC] = { "parametric", "Parametric Equalizer",
         "Three fully parametric bells",
-        "eq", "Equalizer", 2, {
+        "eq", {
         { "low_freq", "Low Frequency", "Hz", 20, 500, 5, 80 },
         { "low_gain", "Low Gain", "dB", -12, 12, 0.5f, 0 },
         { "low_q", "Low Q", "", 0.3f, 8, 0.1f, 0.9f },
@@ -326,7 +324,7 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         { "high_q", "High Q", "", 0.3f, 8, 0.1f, 0.9f } } },
     [AH_ADV_MB_COMP] = { "mb_comp", "Multi-band Compressor",
         "Three bands, each with its own threshold and ratio",
-        "bands", "Dynamics", 2, {
+        "bands", {
         { "low_split", "Low Crossover", "Hz", 60, 500, 10, 200 },
         { "high_split", "High Crossover", "Hz", 1000, 8000, 100, 2500 },
         { "low_threshold", "Low Threshold", "dB", -60, 0, 0.5f, -20 },
@@ -338,24 +336,24 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         { "makeup", "Makeup Gain", "dB", 0, 12, 0.5f, 2 } } },
     [AH_ADV_TRANSIENT] = { "transients", "Transient Shaper",
         "Level-independent attack and sustain, like a transient designer",
-        "view-curve", "Dynamics", 2, {
+        "view-curve", {
         { "attack", "Attack", "%", -100, 100, 5, 30 },
         { "sustain", "Sustain", "%", -100, 100, 5, 0 } } },
     [AH_ADV_DEESSER] = { "deesser", "De-Esser",
         "Turns down the band above the frequency while it is harsh",
-        "effect-dialogue", "Cleanup", 2, {
+        "effect-dialogue", {
         { "freq", "Frequency", "Hz", 3000, 10000, 100, 6000 },
         { "threshold", "Threshold", "dB", -60, 0, 0.5f, -32 },
         { "reduction", "Max Reduction", "dB", 0, 24, 0.5f, 8 } } },
     [AH_ADV_SPEC_GATE] = { "spec_gate", "Spectral Gate",
         "Three-band gate: each band closes on its own when it drops below the threshold",
-        "work", "Cleanup", 2, {
+        "work", {
         { "threshold", "Threshold", "dB", -80, -20, 1, -55 },
         { "range", "Range", "dB", 0, 60, 1, 24 },
         { "release", "Release", "ms", 20, 1000, 10, 150 } } },
     [AH_ADV_DYN_EQ] = { "dyn_eq", "Dynamic EQ",
         "A bell that moves with level: negative range ducks, positive lifts",
-        "eq", "Equalizer", 2, {
+        "eq", {
         { "freq", "Frequency", "Hz", 200, 10000, 50, 3000 },
         { "q", "Q", "", 0.5f, 8, 0.1f, 1.4f },
         { "threshold", "Threshold", "dB", -60, 0, 0.5f, -30 },
@@ -363,34 +361,34 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         { "range", "Range", "dB", -18, 18, 0.5f, -6 } } },
     [AH_ADV_ADAPT_EQ] = { "adapt_eq", "Adaptive Equalizer",
         "Slowly steers lows, mids and highs toward a target tilt",
-        "intel-balanced", "Equalizer", 2, {
+        "intel-balanced", {
         { "strength", "Strength", "%", 0, 100, 5, 50 },
         { "tilt", "Target Tilt", "dB", 0, 12, 0.5f, 6 },
         { "max_change", "Max Change", "dB", 0, 12, 0.5f, 6 },
         { "speed", "Speed", "s", 0.5f, 10, 0.5f, 3 } } },
     [AH_ADV_FD_WIDTH] = { "fd_width", "Frequency-Dependent Stereo Width",
         "Separate width below and above a crossover",
-        "effect-surround", "Space", 2, {
+        "effect-surround", {
         { "split", "Crossover", "Hz", 100, 2000, 10, 300 },
         { "low_width", "Low Width", "%", 0, 200, 5, 60 },
         { "high_width", "High Width", "%", 0, 250, 5, 140 } } },
     /* The centre (mid) is where vocals, kick, snare and bass sit in a stereo mix. */
     [AH_ADV_CENTRE_FOCUS] = { "centre_focus", "Centre Focus",
         "Brings the centre forward: vocals, kick and bass, without touching the sides",
-        "effect-dialogue", "Centre", 0, {
+        "effect-dialogue", {
         { "level", "Centre Level", "dB", -6, 9, 0.5f, 2 },
         { "side", "Side Level", "dB", -12, 3, 0.5f, 0 },
         { "presence_freq", "Presence Frequency", "Hz", 800, 5000, 50, 2500 },
         { "presence", "Centre Presence", "dB", -6, 9, 0.5f, 2 } } },
     [AH_ADV_CENTRE_PUNCH] = { "centre_punch", "Centre Punch",
         "Sharpens the hits in the centre, like kick and snare, and leaves the sides alone",
-        "view-curve", "Centre", 0, {
+        "view-curve", {
         { "attack", "Punch", "%", 0, 100, 5, 40 },
         { "sustain", "Sustain", "%", -100, 100, 5, 0 },
         { "focus", "Focus Below", "Hz", 60, 2000, 10, 250 } } },
     [AH_ADV_CENTRE_ANCHOR] = { "centre_anchor", "Centre Anchor",
         "Keeps reverb, crossfeed and other Space effects out of the centre so it stays dry and solid",
-        "bands", "Centre", 0, {
+        "bands", {
         { "amount", "Anchor", "%", 0, 100, 5, 70 } } },
 };
 
@@ -451,20 +449,6 @@ const char *ah_advanced_slot_icon(int slot)
     if (slot < 0 || slot >= AH_ADV_SLOTS)
         return "eq";
     return k_meta[slot].icon;
-}
-
-const char *ah_advanced_slot_group(int slot)
-{
-    if (slot < 0 || slot >= AH_ADV_SLOTS)
-        return "";
-    return k_meta[slot].group;
-}
-
-int ah_advanced_slot_tab(int slot)
-{
-    if (slot < 0 || slot >= AH_ADV_SLOTS)
-        return 0;
-    return k_meta[slot].tab;
 }
 
 const char *ah_advanced_preset_name(int id)

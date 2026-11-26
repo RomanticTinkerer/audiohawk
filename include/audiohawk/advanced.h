@@ -120,8 +120,6 @@ const char *ah_advanced_slot_key(int slot);
 const char *ah_advanced_slot_title(int slot);
 const char *ah_advanced_slot_blurb(int slot);
 const char *ah_advanced_slot_icon(int slot);
-const char *ah_advanced_slot_group(int slot);
-int ah_advanced_slot_tab(int slot); /* 0 enhance, 1 fun, 2 process */
 int ah_advanced_param_count(int slot);
 const AhAdvParam *ah_advanced_param(int slot, int index); /* NULL when out of range */
 
