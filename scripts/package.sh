@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${AUDIOHAWK_VERSION:-0.4.1b}"
+VERSION="${AUDIOHAWK_VERSION:-0.5.0}"
 DEB_ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
 RPM_ARCH="x86_64"
 WORK="$ROOT/build-pkg"

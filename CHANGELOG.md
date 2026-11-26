@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 - 2026-11-26
+
+The Centre Focus Update. The last few releases spent a lot of time on stereo width, and the centre got left behind. That's where a mix keeps its vocals, kick, snare and bass, so this release gives it some love.
+
+### Added
+- Centre Focus (Advanced, new Centre group): turns the centre up or the sides down, with a presence lift that only touches the centre. Vocals come forward without making cymbals and wide guitars harsh
+- Centre Punch: a transient shaper that only works on the centre below a focus frequency, so kick and snare hit harder while the stereo room around them stays the same
+- Centre Anchor: keeps reverb, crossfeed and the other Space effects out of the centre. The sides keep all their width and tail, and the middle stays dry and solid
+
+### Changed
+- Music, Movie/Video, Game, Casual and Mood now use the centre effects. Movie/Video lifts dialogue in the centre and keeps the hall reverb off it, Mood keeps its room and width around a dry centre, and Music gets a bit more kick and vocal
+- The Headphones and Movie Night Advanced presets now turn on Centre Anchor, and Movie Night also turns on Centre Focus
+
 ## 0.4.1b - 2026-11-22
 
 ### Added
