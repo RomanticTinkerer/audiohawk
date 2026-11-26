@@ -7,19 +7,20 @@ AudioHawk is a PipeWire-based audio equalizer and listening-profile manager, bui
 ## Features
 
 - **Equalizer:** Enable or disable system-wide audio enhancement with one switch.
-- **Listening Profiles:** Switch between Music, Movie/Video, Game, Work, Casual, and Mood presets.
+- **Listening Profiles:** Switch between Music, Movie/Video, Game, Work, Casual, Mood, Study, Sleep and Classes. A profile sets the EQ, the effects and the Advanced chain in one click.
 - **Intelligent Equalizer:** Choose between Off, Detailed, Warm, and Balanced sound adjustments.
 - **Per-App Profiles:** Automatically apply different audio settings to individual applications.
 - **Device Memory:** Remember your application audio preferences for different output devices.
 - **System Pitch:** Adjust the pitch of routed system audio by up to 15 semitones in either direction.
 - **Virtual Surround:** Add a wider, more spatial sound to ordinary stereo audio.
+- **Centre Focus:** Bring vocals, kick and bass forward, add punch to the centre, and keep reverb and width from smearing it.
 - **Automatic Recovery:** AudioHawk reconnects and restores your audio setup after your computer wakes from sleep.
 - **Startup Support:** Start AudioHawk automatically when you log in.
 - **Persistent Settings:** Your preferences are saved between sessions.
 
 ## Listening Profiles
 
-AudioHawk comes with six profiles, each designed around a different listening experience.
+AudioHawk comes with nine profiles, each designed around a different listening experience.
 
 | Profile | Designed for |
 |---|---|
@@ -29,6 +30,9 @@ AudioHawk comes with six profiles, each designed around a different listening ex
 | Work | Comfortable, speech-focused audio |
 | Casual | A softer, warmer sound |
 | Mood | Deeper bass and brighter highs |
+| Study | Low fatigue for long focus sessions |
+| Sleep | Dark, soft and quiet for falling asleep |
+| Classes | Clear, steady speech for live classes and lectures |
 
 You can also use Intelligent Equalizer modes to further adjust your selected profile.
 
