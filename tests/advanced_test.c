@@ -116,6 +116,12 @@ static void check_every_control(bool verbose)
 {
     make_signal();
     for (int slot = 0; slot < AH_ADV_SLOTS; ++slot) {
+        /* Centre Balance only acts on a lopsided centre, so feed it one: the same
+         * sound in both ears, 3 dB quieter on the right. */
+        make_signal();
+        if (slot == AH_ADV_CENTRE_BALANCE)
+            for (int i = 0; i < SW_N; ++i)
+                sw_x[1][i] = 0.7f * sw_x[0][i];
         const int count = ah_advanced_param_count(slot);
         CHECK(count >= 1 && count <= AH_ADV_PARAMS);
         CHECK(ah_advanced_param(slot, count) == NULL);
@@ -447,6 +453,89 @@ int main(int argc, char **argv)
         sweep_run(&cs, a);
         for (int i = 0; i < SW_N; ++i)
             CHECK(fabsf((a[0][i] + a[1][i]) - (sw_x[0][i] + sw_x[1][i])) < 1e-4f);
+
+        /* (a) Centre Priority leaves the mid exactly unchanged */
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_PRIORITY] = true;
+        sweep_run(&cs, a);
+        for (int i = 0; i < SW_N; ++i) {
+            const float mid = sw_x[0][i] + sw_x[1][i];
+            CHECK(fabsf((a[0][i] + a[1][i]) - mid) < 1e-4f);
+        }
+
+        /* (b) Centre Lock and Centre Density leave the side exactly unchanged */
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_LOCK] = true;
+        sweep_run(&cs, a);
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_DENSITY] = true;
+        sweep_run(&cs, d);
+        for (int i = 0; i < SW_N; ++i) {
+            const float side = sw_x[0][i] - sw_x[1][i];
+            CHECK(fabsf((a[0][i] - a[1][i]) - side) < 1e-4f);
+            CHECK(fabsf((d[0][i] - d[1][i]) - side) < 1e-4f);
+        }
+
+        /* (c) Centre Balance on a mono input with trim +3 and max 6:
+         * over the last half second, the L/R RMS ratio in dB is within 0.5 of +3 */
+        for (int i = 0; i < SW_N; ++i)
+            sw_x[1][i] = sw_x[0][i];
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_BALANCE] = true;
+        cs.param[AH_ADV_CENTRE_BALANCE][0] = 6.f; /* max */
+        cs.param[AH_ADV_CENTRE_BALANCE][1] = 1.f; /* speed, seconds */
+        cs.param[AH_ADV_CENTRE_BALANCE][2] = 3.f; /* trim */
+        sweep_run(&cs, a);
+        float rms_l = 0.f, rms_r = 0.f;
+        for (int i = SW_N - SW_RATE / 2; i < SW_N; ++i) {
+            rms_l += a[0][i] * a[0][i];
+            rms_r += a[1][i] * a[1][i];
+        }
+        const float ratio_db = 20.f * log10f(sqrtf(rms_l) / (sqrtf(rms_r) + 1e-12f));
+        CHECK(fabsf(ratio_db - 3.f) < 0.5f);
+
+        /* It also has to learn: a centre 3 dB down on the right comes out level. */
+        for (int i = 0; i < SW_N; ++i)
+            sw_x[1][i] = 0.7f * sw_x[0][i];
+        cs.param[AH_ADV_CENTRE_BALANCE][2] = 0.f; /* trim */
+        sweep_run(&cs, a);
+        rms_l = rms_r = 0.f;
+        for (int i = SW_N - SW_RATE / 2; i < SW_N; ++i) {
+            rms_l += a[0][i] * a[0][i];
+            rms_r += a[1][i] * a[1][i];
+        }
+        CHECK(fabsf(20.f * log10f(sqrtf(rms_l) / (sqrtf(rms_r) + 1e-12f))) < 0.5f);
+
+        /* (d) Centre Lock boosts a mono signal by more than it boosts independent noise */
+        ah_advanced_defaults(&cs);
+        cs.on[AH_ADV_CENTRE_LOCK] = true;
+        sweep_run(&cs, a);
+        float in_mono = 0.f, out_mono = 0.f;
+        for (int ch = 0; ch < 2; ++ch) {
+            for (int i = SW_SKIP; i < SW_N; ++i) {
+                in_mono += sw_x[ch][i] * sw_x[ch][i];
+                out_mono += a[ch][i] * a[ch][i];
+            }
+        }
+        const float boost_mono = sqrtf(out_mono / in_mono);
+
+        unsigned s_noise = 54321;
+        for (int i = 0; i < SW_N; ++i) {
+            sw_x[0][i] = 0.2f * frand(&s_noise);
+            sw_x[1][i] = 0.2f * frand(&s_noise);
+        }
+        sweep_run(&cs, d);
+        float in_noise = 0.f, out_noise = 0.f;
+        for (int ch = 0; ch < 2; ++ch) {
+            for (int i = SW_SKIP; i < SW_N; ++i) {
+                in_noise += sw_x[ch][i] * sw_x[ch][i];
+                out_noise += d[ch][i] * d[ch][i];
+            }
+        }
+        const float boost_noise = sqrtf(out_noise / in_noise);
+        CHECK(boost_mono > boost_noise);
+
+        make_signal();
     }
 
     /* Pass -v to print how much each control moves the sound. */

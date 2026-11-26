@@ -390,6 +390,32 @@ static const AhAdvMeta k_meta[AH_ADV_SLOTS] = {
         "Keeps reverb, crossfeed and other Space effects out of the centre so it stays dry and solid",
         "bands", {
         { "amount", "Anchor", "%", 0, 100, 5, 70 } } },
+    [AH_ADV_CENTRE_PRIORITY] = { "centre_priority", "Centre Priority",
+        "Dips the sides only while the centre is busy, so a voice always cuts through",
+        "effect-dialogue", {
+        { "threshold", "Threshold", "dB", -60, 0, 0.5f, -30 },
+        { "duck", "Max Duck", "dB", 0, 12, 0.5f, 4 },
+        { "key_freq", "Key Frequency", "Hz", 300, 5000, 50, 1500 },
+        { "release", "Release", "ms", 50, 2000, 10, 300 } } },
+    [AH_ADV_CENTRE_DENSITY] = { "centre_density", "Centre Density",
+        "Parallel compression on the centre only, for thicker vocals and a fuller middle",
+        "effect-leveler", {
+        { "threshold", "Threshold", "dB", -60, 0, 0.5f, -30 },
+        { "ratio", "Ratio", ":1", 1, 20, 0.5f, 6 },
+        { "makeup", "Makeup Gain", "dB", 0, 24, 0.5f, 6 },
+        { "mix", "Blend", "%", 0, 100, 5, 30 } } },
+    [AH_ADV_CENTRE_LOCK] = { "centre_lock", "Centre Lock",
+        "Lifts only what both ears truly share, so hard-panned parts are left alone",
+        "bands", {
+        { "boost", "Boost", "dB", 0, 9, 0.5f, 4 },
+        { "strict", "Strictness", "%", 0, 100, 5, 60 },
+        { "speed", "Speed", "ms", 20, 1000, 10, 150 } } },
+    [AH_ADV_CENTRE_BALANCE] = { "centre_balance", "Centre Balance",
+        "Slowly re-centres a lopsided centre from an uneven master or headphones",
+        "intel-balanced", {
+        { "max", "Max Correction", "dB", 0, 6, 0.5f, 3 },
+        { "speed", "Speed", "s", 1, 30, 1, 8 },
+        { "trim", "Trim", "dB", -6, 6, 0.5f, 0 } } },
 };
 
 static const char *k_presets[AH_ADV_PRESETS] = {
@@ -406,9 +432,11 @@ static const int k_cleanup[] = {
     AH_ADV_RES_TAMER, AH_ADV_DEESSER
 };
 static const int k_tone[] = {
+    AH_ADV_CENTRE_BALANCE,
     AH_ADV_DYN_BASS, AH_ADV_PSYCHO_BASS, AH_ADV_COMPRESSOR, AH_ADV_MB_COMP,
-    AH_ADV_TRANSIENT, AH_ADV_CENTRE_PUNCH, AH_ADV_DYN_EQ, AH_ADV_ADAPT_EQ,
-    AH_ADV_PARAMETRIC, AH_ADV_CENTRE_FOCUS, AH_ADV_SPECTRAL, AH_ADV_DYN_TREBLE, AH_ADV_EXCITER, AH_ADV_MB_EXCITER
+    AH_ADV_TRANSIENT, AH_ADV_CENTRE_PUNCH, AH_ADV_CENTRE_DENSITY, AH_ADV_DYN_EQ, AH_ADV_ADAPT_EQ,
+    AH_ADV_PARAMETRIC, AH_ADV_CENTRE_FOCUS, AH_ADV_CENTRE_LOCK, AH_ADV_CENTRE_PRIORITY,
+    AH_ADV_SPECTRAL, AH_ADV_DYN_TREBLE, AH_ADV_EXCITER, AH_ADV_MB_EXCITER
 };
 static const int k_color[] = {
     AH_ADV_ANALOG, AH_ADV_TUBE, AH_ADV_TAPE, AH_ADV_DISTORT, AH_ADV_VINYL,
@@ -1304,6 +1332,27 @@ static void design_slot(AhAdvBank *b, int slot)
     case AH_ADV_CENTRE_ANCHOR:
         c[0] = p[0] * 0.01f;
         break;
+    case AH_ADV_CENTRE_PRIORITY:
+        design_bandpass(&f[0], p[2], 0.7f, rate);
+        c[0] = tau_coeff(10.f, rate);
+        c[1] = tau_coeff(p[3], rate);
+        break;
+    case AH_ADV_CENTRE_DENSITY:
+        c[0] = tau_coeff(5.f, rate);
+        c[1] = tau_coeff(120.f, rate);
+        break;
+    case AH_ADV_CENTRE_LOCK:
+        design_lowpass(&f[0], 250.f, 0.707f, rate);
+        design_highpass(&f[1], 4000.f, 0.707f, rate);
+        c[0] = tau_coeff(p[2], rate);
+        c[1] = 1.f + 0.07f * p[1];
+        break;
+    case AH_ADV_CENTRE_BALANCE:
+        design_bandpass(&f[0], 1000.f, 0.5f, rate);
+        c[0] = tau_coeff(p[1] * 1000.f, rate); /* how fast the correction moves */
+        c[1] = tau_coeff(50.f, rate);          /* is the band centred right now? */
+        c[2] = tau_coeff(2000.f, rate);        /* L and R level of centred sound */
+        break;
     case AH_ADV_PARAMETRIC:
         for (int k = 0; k < 3; ++k)
             design_peaking(&f[k], p[3 * k], p[3 * k + 2], p[3 * k + 1], rate);
@@ -1732,6 +1781,67 @@ static void run_slot(AhAdvancedEngine *e, const AhAdvBank *b, int slot, float *l
         const float side = 0.5f * (x[0] - x[1]) * c[1];
         x[0] = mid + side;
         x[1] = mid - side;
+        break;
+    }
+    case AH_ADV_CENTRE_PRIORITY: {
+        const float mid = 0.5f * (x[0] + x[1]);
+        float side = 0.5f * (x[0] - x[1]);
+        const float key = bq_run(&f[0], &m->z[0][0], mid);
+        const float level = rms_follow(&m->env[0], key, c[0], c[1]);
+        const float amount = clampf((lin2db(level) - p[0]) / 12.f, 0.f, 1.f);
+        side *= db2lin(-amount * p[1]);
+        x[0] = mid + side;
+        x[1] = mid - side;
+        break;
+    }
+    case AH_ADV_CENTRE_DENSITY: {
+        float mid = 0.5f * (x[0] + x[1]);
+        const float side = 0.5f * (x[0] - x[1]);
+        const float g = comp_gain(&m->env[0], mid, c[0], c[1], p[0], p[1], 6.f, p[2]);
+        mid += p[3] * 0.01f * mid * g;
+        x[0] = mid + side;
+        x[1] = mid - side;
+        break;
+    }
+    case AH_ADV_CENTRE_LOCK: {
+        float band[3][2];
+        EACH_CH {
+            band[0][ch] = bq_run(&f[0], &m->z[ch][0], x[ch]);
+            band[2][ch] = bq_run(&f[1], &m->z[ch][1], x[ch]);
+            band[1][ch] = x[ch] - band[0][ch] - band[2][ch];
+        }
+        for (int k = 0; k < 3; ++k) {
+            const float bl = band[k][0];
+            const float br = band[k][1];
+            m->env[3 * k]     += c[0] * (bl * br - m->env[3 * k]);
+            m->env[3 * k + 1] += c[0] * (bl * bl - m->env[3 * k + 1]);
+            m->env[3 * k + 2] += c[0] * (br * br - m->env[3 * k + 2]);
+            const float r = m->env[3 * k] / sqrtf(m->env[3 * k + 1] * m->env[3 * k + 2] + 1e-12f);
+            const float w = powf(fmaxf(r, 0.f), c[1]);
+            const float bmid = 0.5f * (bl + br);
+            const float add = bmid * (db2lin(p[0] * w) - 1.f);
+            x[0] += add;
+            x[1] += add;
+        }
+        break;
+    }
+    case AH_ADV_CENTRE_BALANCE: {
+        const float bl = bq_run(&f[0], &m->z[0][0], x[0]);
+        const float br = bq_run(&f[0], &m->z[1][0], x[1]);
+        m->env[0] += c[1] * (bl * br - m->env[0]);
+        m->env[1] += c[1] * (bl * bl - m->env[1]);
+        m->env[2] += c[1] * (br * br - m->env[2]);
+        const float r = m->env[0] / sqrtf(m->env[1] * m->env[2] + 1e-12f);
+        if (r > 0.5f) {
+            m->env[3] += c[2] * (bl * bl - m->env[3]);
+            m->env[4] += c[2] * (br * br - m->env[4]);
+        }
+        const float imbalance = 10.f * log10f((m->env[3] + 1e-12f) / (m->env[4] + 1e-12f));
+        const float want = clampf(p[2] - imbalance, -p[0], p[0]);
+        /* Ease toward the target so the image drifts back to centre instead of jumping. */
+        m->env[5] += c[0] * (want - m->env[5]);
+        x[0] *= db2lin(0.5f * m->env[5]);
+        x[1] *= db2lin(-0.5f * m->env[5]);
         break;
     }
     case AH_ADV_PARAMETRIC:

@@ -22,9 +22,10 @@ static const struct {
         .title = "Centre",
         .id = "centre",
         .groups = {
-            { "Centre", { AH_ADV_CENTRE_FOCUS, AH_ADV_CENTRE_PUNCH, AH_ADV_CENTRE_ANCHOR }, 3 },
+            { "Image", { AH_ADV_CENTRE_FOCUS, AH_ADV_CENTRE_LOCK, AH_ADV_CENTRE_BALANCE, AH_ADV_CENTRE_PRIORITY, AH_ADV_CENTRE_ANCHOR }, 5 },
+            { "Impact", { AH_ADV_CENTRE_PUNCH, AH_ADV_CENTRE_DENSITY }, 2 },
         },
-        .n_groups = 1,
+        .n_groups = 2,
     },
     {
         .title = "Tone",
