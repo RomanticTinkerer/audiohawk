@@ -21,6 +21,8 @@ static const AhAdvSet k_adv_music[] = {
     ON(AH_ADV_EXCITER), { AH_ADV_EXCITER, 0, 4000.f }, { AH_ADV_EXCITER, 1, 6.0f }, { AH_ADV_EXCITER, 2, 15.f },
     ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 1.5f }, { AH_ADV_CENTRE_FOCUS, 3, 1.5f },
     ON(AH_ADV_CENTRE_PUNCH), { AH_ADV_CENTRE_PUNCH, 0, 35.f }, { AH_ADV_CENTRE_PUNCH, 2, 200.f },
+    ON(AH_ADV_CENTRE_LOCK), { AH_ADV_CENTRE_LOCK, 0, 3.0f },
+    ON(AH_ADV_CENTRE_DENSITY), { AH_ADV_CENTRE_DENSITY, 3, 20.0f },
     END
 };
 
@@ -34,6 +36,8 @@ static const AhAdvSet k_adv_movie[] = {
     ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 3.0f }, { AH_ADV_CENTRE_FOCUS, 1, -1.5f },
     { AH_ADV_CENTRE_FOCUS, 2, 2000.f }, { AH_ADV_CENTRE_FOCUS, 3, 2.5f },
     ON(AH_ADV_CENTRE_ANCHOR), { AH_ADV_CENTRE_ANCHOR, 0, 60.f },
+    ON(AH_ADV_CENTRE_PRIORITY), { AH_ADV_CENTRE_PRIORITY, 1, 4.0f }, { AH_ADV_CENTRE_PRIORITY, 2, 1500.0f },
+    ON(AH_ADV_CENTRE_LOCK), { AH_ADV_CENTRE_LOCK, 0, 3.0f },
     END
 };
 
@@ -62,6 +66,7 @@ static const AhAdvSet k_adv_casual[] = {
     ON(AH_ADV_LIMITER),
     ON(AH_ADV_ANALOG), { AH_ADV_ANALOG, 0, 2.5f }, { AH_ADV_ANALOG, 1, 1.0f }, { AH_ADV_ANALOG, 2, 35.f },
     ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 1.0f }, { AH_ADV_CENTRE_FOCUS, 3, 1.0f },
+    ON(AH_ADV_CENTRE_BALANCE), { AH_ADV_CENTRE_BALANCE, 0, 2.0f },
     END
 };
 
@@ -74,6 +79,7 @@ static const AhAdvSet k_adv_mood[] = {
     /* Wide and roomy around a dry, solid centre. */
     ON(AH_ADV_CENTRE_ANCHOR), { AH_ADV_CENTRE_ANCHOR, 0, 70.f },
     ON(AH_ADV_CENTRE_PUNCH), { AH_ADV_CENTRE_PUNCH, 0, 25.f }, { AH_ADV_CENTRE_PUNCH, 2, 150.f },
+    ON(AH_ADV_CENTRE_DENSITY), { AH_ADV_CENTRE_DENSITY, 2, 6.0f }, { AH_ADV_CENTRE_DENSITY, 3, 25.0f },
     END
 };
 
@@ -83,6 +89,7 @@ static const AhAdvSet k_adv_study[] = {
     ON(AH_ADV_COMPRESSOR), { AH_ADV_COMPRESSOR, 0, -20.f }, { AH_ADV_COMPRESSOR, 1, 2.0f }, { AH_ADV_COMPRESSOR, 2, 25.0f }, { AH_ADV_COMPRESSOR, 3, 120.0f }, { AH_ADV_COMPRESSOR, 4, 8.0f }, { AH_ADV_COMPRESSOR, 5, 1.5f },
     ON(AH_ADV_CROSSFEED), { AH_ADV_CROSSFEED, 0, 700.f }, { AH_ADV_CROSSFEED, 1, 4.5f },
     ON(AH_ADV_DEESSER), { AH_ADV_DEESSER, 0, 6000.f }, { AH_ADV_DEESSER, 1, -32.f }, { AH_ADV_DEESSER, 2, 8.0f },
+    ON(AH_ADV_CENTRE_BALANCE), { AH_ADV_CENTRE_BALANCE, 0, 2.0f },
     END
 };
 
