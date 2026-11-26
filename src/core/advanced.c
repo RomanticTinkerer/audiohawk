@@ -625,6 +625,7 @@ static const AhAdvSet k_headphones[] = {
     ON(AH_ADV_DC), ON(AH_ADV_LIMITER), ON(AH_ADV_HIGHPASS), ON(AH_ADV_CROSSFEED),
     ON(AH_ADV_ANALOG), { AH_ADV_ANALOG, 0, 3 }, { AH_ADV_ANALOG, 2, 30 },
     ON(AH_ADV_SPATIAL3D), { AH_ADV_SPATIAL3D, 0, 30 },
+    ON(AH_ADV_CENTRE_ANCHOR),
     END
 };
 static const AhAdvSet k_movie[] = {
@@ -633,6 +634,7 @@ static const AhAdvSet k_movie[] = {
     ON(AH_ADV_LOUDNESS),
     ON(AH_ADV_SPECTRAL), { AH_ADV_SPECTRAL, 1, 3 },
     ON(AH_ADV_HALL), { AH_ADV_HALL, 3, 8 },
+    ON(AH_ADV_CENTRE_FOCUS), ON(AH_ADV_CENTRE_ANCHOR),
     END
 };
 static const AhAdvSet k_lofi[] = {

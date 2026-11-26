@@ -19,6 +19,8 @@ static const AhAdvSet k_adv_music[] = {
     ON(AH_ADV_COMPRESSOR), { AH_ADV_COMPRESSOR, 0, -20.f }, { AH_ADV_COMPRESSOR, 1, 2.0f }, { AH_ADV_COMPRESSOR, 5, 2.0f },
     ON(AH_ADV_STEREO_IMAGE), { AH_ADV_STEREO_IMAGE, 0, 115.f },
     ON(AH_ADV_EXCITER), { AH_ADV_EXCITER, 0, 4000.f }, { AH_ADV_EXCITER, 1, 6.0f }, { AH_ADV_EXCITER, 2, 15.f },
+    ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 1.5f }, { AH_ADV_CENTRE_FOCUS, 3, 1.5f },
+    ON(AH_ADV_CENTRE_PUNCH), { AH_ADV_CENTRE_PUNCH, 0, 35.f }, { AH_ADV_CENTRE_PUNCH, 2, 200.f },
     END
 };
 
@@ -28,6 +30,10 @@ static const AhAdvSet k_adv_movie[] = {
     ON(AH_ADV_COMPRESSOR), { AH_ADV_COMPRESSOR, 0, -24.f }, { AH_ADV_COMPRESSOR, 1, 3.5f }, { AH_ADV_COMPRESSOR, 5, 3.0f },
     ON(AH_ADV_LOUDNESS),
     ON(AH_ADV_HALL), { AH_ADV_HALL, 0, 75.f }, { AH_ADV_HALL, 1, 1.2f }, { AH_ADV_HALL, 2, 3500.f }, { AH_ADV_HALL, 3, 8.0f },
+    /* Film dialogue lives in the centre, so lift it there and keep the hall off it. */
+    ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 3.0f }, { AH_ADV_CENTRE_FOCUS, 1, -1.5f },
+    { AH_ADV_CENTRE_FOCUS, 2, 2000.f }, { AH_ADV_CENTRE_FOCUS, 3, 2.5f },
+    ON(AH_ADV_CENTRE_ANCHOR), { AH_ADV_CENTRE_ANCHOR, 0, 60.f },
     END
 };
 
@@ -36,6 +42,9 @@ static const AhAdvSet k_adv_game[] = {
     ON(AH_ADV_LIMITER),
     ON(AH_ADV_SPATIAL3D), { AH_ADV_SPATIAL3D, 0, 45.f }, { AH_ADV_SPATIAL3D, 1, 10.f }, { AH_ADV_SPATIAL3D, 2, 25.f },
     ON(AH_ADV_TRANSIENT), { AH_ADV_TRANSIENT, 0, 40.f }, { AH_ADV_TRANSIENT, 1, -10.f },
+    /* Voice chat and callouts sit in the centre. The sides keep the footsteps. */
+    ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 1.0f }, { AH_ADV_CENTRE_FOCUS, 2, 3000.f },
+    { AH_ADV_CENTRE_FOCUS, 3, 1.5f },
     END
 };
 
@@ -52,6 +61,7 @@ static const AhAdvSet k_adv_casual[] = {
     ON(AH_ADV_DC),
     ON(AH_ADV_LIMITER),
     ON(AH_ADV_ANALOG), { AH_ADV_ANALOG, 0, 2.5f }, { AH_ADV_ANALOG, 1, 1.0f }, { AH_ADV_ANALOG, 2, 35.f },
+    ON(AH_ADV_CENTRE_FOCUS), { AH_ADV_CENTRE_FOCUS, 0, 1.0f }, { AH_ADV_CENTRE_FOCUS, 3, 1.0f },
     END
 };
 
@@ -61,6 +71,9 @@ static const AhAdvSet k_adv_mood[] = {
     ON(AH_ADV_TUBE), { AH_ADV_TUBE, 0, 4.0f }, { AH_ADV_TUBE, 1, 40.f }, { AH_ADV_TUBE, 2, 60.f },
     ON(AH_ADV_WIDEN), { AH_ADV_WIDEN, 0, 140.f }, { AH_ADV_WIDEN, 1, 0.0f },
     ON(AH_ADV_ROOM), { AH_ADV_ROOM, 0, 110.f }, { AH_ADV_ROOM, 1, 0.7f }, { AH_ADV_ROOM, 2, 5000.f }, { AH_ADV_ROOM, 3, 15.f },
+    /* Wide and roomy around a dry, solid centre. */
+    ON(AH_ADV_CENTRE_ANCHOR), { AH_ADV_CENTRE_ANCHOR, 0, 70.f },
+    ON(AH_ADV_CENTRE_PUNCH), { AH_ADV_CENTRE_PUNCH, 0, 25.f }, { AH_ADV_CENTRE_PUNCH, 2, 150.f },
     END
 };
 
